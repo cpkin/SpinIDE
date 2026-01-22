@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spingpt.dev/schemas/metadata-v1.schema.json",
+  "title": "SpinGPT Metadata Schema v1",
+  "description": "JSON Schema for FV-1 SpinASM metadata headers, supporting versioned metadata with required fields for effect documentation, IO configuration, pot labeling, memory allocation, and signal flow graphs.",
+  "type": "object",
+  "required": [
+    "effectName",
+    "io",
+    "pots",
+    "memory",
+    "graph"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["v1", "v2"],
+      "default": "v1",
+      "description": "Metadata schema version. v1 is default for backward compatibility. v2 adds extended validation and optional fields for future expansion."
+    },
+    "effectName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Human-readable name of the effect. Used for display and documentation."
+    },
+    "io": {
+      "type": "string",
+      "enum": ["mono_mono", "mono_stereo", "stereo_stereo"],
+      "description": "Input/output mode for the effect. Determines audio channel configuration: mono_mono (single in, single out), mono_stereo (single in, stereo out), stereo_stereo (stereo in, stereo out)."
+    },
+    "pots": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "Array of exactly 3 potentiometer configurations corresponding to POT0, POT1, and POT2 on the FV-1.",
+      "items": {
+        "type": "object",
+        "required": ["id", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["pot0", "pot1", "pot2"],
+            "description": "Identifier for the potentiometer. Must be one of pot0, pot1, or pot2."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "description": "Human-readable label for the potentiometer control (e.g., 'Mix', 'Time', 'Feedback'). Displayed in the UI and documentation."
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "array",
+      "description": "Array of delay memory allocations. Each allocation specifies a named delay buffer and its size in samples.",
+      "items": {
+        "type": "object",
+        "required": ["name", "samples"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifier for the memory allocation (e.g., 'delay1', 'delayL', 'delayR'). Should match memory references in the SpinASM code."
+          },
+          "samples": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32768,
+            "description": "Size of the delay buffer in samples. FV-1 supports up to 32768 samples total across all allocations at 32kHz sample rate."
+          }
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "additionalProperties": false,
+      "description": "Signal flow graph describing the processing blocks and their connections. Used for visualization only; does not affect code validation or simulation.",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "description": "Array of node identifiers representing processing blocks in the signal path (e.g., 'input', 'delay', 'filter', 'output').",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "edges": {
+          "type": "array",
+          "description": "Array of directed edges defining signal flow between nodes. Cycles are allowed for feedback paths.",
+          "items": {
+            "type": "object",
+            "required": ["from", "to"],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Source node identifier. Must exist in the nodes array."
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Destination node identifier. Must exist in the nodes array."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
