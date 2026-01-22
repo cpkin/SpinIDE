@@ -31,6 +31,13 @@ SpinGPT delivers a browser-based FV-1 SpinASM validator and audio simulator thro
 4. Simulation fidelity target documented: "gross correctness" for bug catching, not cycle-accurate emulation
 5. Community feedback collected from at least 2 forums identifying top 3 pain points in existing tools
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 00-01-PLAN.md — Lock SpinASM dialect spec and simulator fidelity strategy
+- [x] 00-02-PLAN.md — Define metadata schema v1 and documentation
+- [ ] 00-03-PLAN.md — Build test corpus manifest and document community gaps
+
 ---
 
 ## Phase 1: Code Validation & Analysis
