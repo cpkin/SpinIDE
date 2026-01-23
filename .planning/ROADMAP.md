@@ -75,7 +75,7 @@ Plans:
 5. One-click button copies all errors and warnings to clipboard for AI iteration workflow
 6. Parser passes all test corpus files from Phase 0 without false positives
 
-**Plans:** 4 plans
+**Plans:** 5 plans
 
 Plans:
 - [x] 01-01-PLAN.md — Scaffold app and validation UI shell
@@ -113,6 +113,15 @@ Plans:
 5. All three IO modes (mono_mono, stereo_stereo, mono_stereo) produce correct output
 6. Simulator passes validation against all official Spin demo programs from test corpus
 7. UI displays simulation limitations and known deviations from hardware behavior
+
+**Plans:** 4 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Build FV-1 fixed-point core and interpreter skeleton
+- [ ] 02-02-PLAN.md — Implement opcode handlers, compiler, and IO modes
+- [ ] 02-03-PLAN.md — Add audio decode/resample pipeline and render API
+- [ ] 02-04-PLAN.md — Add simulation UI, demos, and editor render wiring
+- [ ] 02-05-PLAN.md — Add corpus validation harness and fidelity messaging
 
 ---
 
