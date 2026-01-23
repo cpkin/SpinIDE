@@ -1,3 +1,5 @@
+import type { LineContext } from './context'
+
 export type DiagnosticSeverity = 'error' | 'warning' | 'info'
 
 export interface ValidationDiagnostic {
@@ -6,6 +8,7 @@ export interface ValidationDiagnostic {
   suggestedFix?: string
   line?: number
   column?: number
+  context?: LineContext
 }
 
 export interface ResourceMeter {
