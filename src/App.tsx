@@ -2,6 +2,7 @@ import SpinEditor from './editor/SpinEditor'
 import { useValidationStore } from './store/validationStore'
 import DiagnosticsPanel from './ui/DiagnosticsPanel'
 import ResourceMeters from './ui/ResourceMeters'
+import SimulationPanel from './ui/SimulationPanel'
 
 function App() {
   const source = useValidationStore((state) => state.source)
@@ -52,6 +53,7 @@ function App() {
 
         <aside className="diagnostics-shell">
           <DiagnosticsPanel />
+          <SimulationPanel />
         </aside>
       </main>
     </div>
