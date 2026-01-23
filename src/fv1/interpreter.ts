@@ -10,6 +10,7 @@
 import { INSTRUCTIONS_PER_SAMPLE, POT_UPDATE_BLOCK_SIZE } from './constants';
 import { createState, resetState } from './state';
 import { getHandler } from './instructions';
+import { normalizeOutput, normalizeInput } from './io';
 import type { FV1State, CompiledProgram, PotValues } from './types';
 
 /**
@@ -31,6 +32,18 @@ export interface ExecutionOptions {
    * Whether to reset state before execution (default: true)
    */
   resetBeforeRun?: boolean;
+  
+  /**
+   * Whether to normalize input (default: false)
+   * Applies -6 dB gain reduction to prevent clipping
+   */
+  normalizeInput?: boolean;
+  
+  /**
+   * Whether to normalize output (default: true)
+   * Applies -1 dB gain reduction to match FV-1 output levels
+   */
+  normalizeOutput?: boolean;
 }
 
 /**
@@ -73,9 +86,10 @@ function executeSample(
   // Update PACC with previous sample's ACC
   state.pacc = state.acc;
   
-  // Store input samples (accessible via LDAX ADCL/ADCR)
-  // For now, we'll just track them in ACC for initial implementation
-  // TODO: Implement proper ADC register access in opcode handlers
+  // Map input samples to ADC registers based on IO mode
+  // TODO: Store ADC values for LDAX ADCL/ADCR access
+  // const adc = mapInputToADC(inputL, inputR, state.ioMode, state.lr);
+  // Will need to add adcl/adcr fields to FV1State for handler access
   
   // Execute up to 128 instructions
   const instructionCount = Math.min(program.instructions.length, INSTRUCTIONS_PER_SAMPLE);
@@ -132,6 +146,8 @@ export function executeProgram(
     initialPots = {},
     onPotUpdate,
     resetBeforeRun = true,
+    normalizeInput: shouldNormalizeInput = false,
+    normalizeOutput: shouldNormalizeOutput = true,
   } = options;
   
   // Create or reset state
@@ -151,7 +167,7 @@ export function executeProgram(
   
   // Process samples
   for (let sample = 0; sample < frameCount; sample++) {
-    // Update POT values every 32 samples
+    // Update POT values every 32 samples (block timing per FV-1 spec)
     if (sample % POT_UPDATE_BLOCK_SIZE === 0 && onPotUpdate) {
       const newPots = onPotUpdate(sample, state);
       if (newPots) {
@@ -168,24 +184,28 @@ export function executeProgram(
       }
     }
     
+    // Normalize input if requested
+    const inL = normalizeInput(inputL[sample], shouldNormalizeInput);
+    const inR = normalizeInput(inputR[sample], shouldNormalizeInput);
+    
     // Toggle LR flag for stereo processing
     // In stereo modes, program runs twice per sample (once for L, once for R)
     if (program.ioMode !== 'mono_mono') {
       // Process left channel
       state.lr = 0;
-      executeSample(state, program, inputL[sample], inputR[sample]);
-      outputL[sample] = state.dacL;
+      executeSample(state, program, inL, inR);
+      outputL[sample] = shouldNormalizeOutput ? normalizeOutput(state.dacL) : state.dacL;
       
       // Process right channel
       state.lr = 1;
-      executeSample(state, program, inputL[sample], inputR[sample]);
-      outputR[sample] = state.dacR;
+      executeSample(state, program, inL, inR);
+      outputR[sample] = shouldNormalizeOutput ? normalizeOutput(state.dacR) : state.dacR;
     } else {
       // Mono mode: process once
       state.lr = 0;
-      executeSample(state, program, inputL[sample], inputR[sample]);
-      outputL[sample] = state.dacL;
-      outputR[sample] = state.dacR;
+      executeSample(state, program, inL, inR);
+      outputL[sample] = shouldNormalizeOutput ? normalizeOutput(state.dacL) : state.dacL;
+      outputR[sample] = shouldNormalizeOutput ? normalizeOutput(state.dacR) : state.dacR;
     }
     
     state.sampleCounter++;
