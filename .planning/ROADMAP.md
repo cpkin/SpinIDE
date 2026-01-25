@@ -89,7 +89,7 @@ Plans:
 
 **Goal:** Users can render audio through FV-1 simulation and hear how their code affects sound
 
-**Status:** Complete (2026-01-23)
+**Status:** Complete (2026-01-25)
 
 **Dependencies:** Phase 1 (requires parser output, AST, validated code)
 
@@ -116,19 +116,20 @@ Plans:
 6. Simulator passes validation against all official Spin demo programs from test corpus
 7. UI displays simulation limitations and known deviations from hardware behavior
 
-**Plans:** 10 plans
+**Plans:** 11 plans
 
 Plans:
 - [x] 02-01-PLAN.md — Build FV-1 fixed-point core and interpreter skeleton
-- [ ] 02-02-PLAN.md — Implement opcode handlers, compiler, and IO modes
+- [x] 02-02-PLAN.md — Implement opcode handlers, compiler, and IO modes
 - [x] 02-03-PLAN.md — Add audio decode/resample pipeline and render API
 - [x] 02-04-PLAN.md — Build simulation panel UI and editor render wiring
 - [x] 02-05-PLAN.md — Add demo assets and layout styling
 - [x] 02-06-PLAN.md — Add corpus validation harness and fidelity messaging
-- [x] 02-07-PLAN.md — Implement LFO state tracking and modulation opcodes
-- [ ] 02-08-PLAN.md — TBD
-- [ ] 02-09-PLAN.md — TBD
-- [ ] 02-10-PLAN.md — TBD
+- [x] 02-07-PLAN.md — Implement LFO state tracking and modulation opcodes (gap closure)
+- [x] 02-08-PLAN.md — Implement control flow and runtime fixes (gap closure)
+- [x] 02-09-PLAN.md — Render performance instrumentation and optimization (gap closure)
+- [x] 02-10-PLAN.md — Diagnostics UI and human verification (gap closure)
+- [x] 02-11-PLAN.md — Opcode coverage and RAW decode (gap closure)
 
 ---
 
@@ -191,11 +192,11 @@ Plans:
 |-------|--------|----------|-----------|
 | 0 - Foundation & Test Infrastructure | Complete | 6/6 requirements | 2026-01-22 |
 | 1 - Code Validation & Analysis | Complete | 15/15 requirements | 2026-01-23 |
-| 2 - Audio Simulation Engine | In progress | 8/12 requirements | — |
+| 2 - Audio Simulation Engine | Complete | 12/12 requirements | 2026-01-25 |
 | 3 - Audio Interaction & Export | Not Started | 0/12 requirements | — |
 | 4 - Signal Path Diagrams | Not Started | 0/5 requirements | — |
 
-**Overall:** 29/50 requirements complete (58%)
+**Overall:** 33/50 requirements complete (66%)
 
 ---
 
