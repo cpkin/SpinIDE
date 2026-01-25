@@ -137,6 +137,8 @@ Plans:
 
 **Goal:** Users can visualize waveforms, manipulate knobs, and export results
 
+**Status:** Not Started
+
 **Dependencies:** Phase 2 (requires audio rendering capability)
 
 **Requirements:**
@@ -161,6 +163,14 @@ Plans:
 5. User can export validated .spn source file and rendered audio as WAV
 6. User can share code + knob settings via URL hash, which loads complete state when visited
 7. Stereo waveforms display as dual channels for stereo_stereo mode
+
+**Plans:** 4 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Waveform visualization and playback controls
+- [ ] 03-02-PLAN.md — Loop region and waveform scrubbing
+- [ ] 03-03-PLAN.md — Analog knobs with fast re-render
+- [ ] 03-04-PLAN.md — Export and URL sharing
 
 ---
 
