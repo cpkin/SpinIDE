@@ -61,6 +61,11 @@ function parseRegister(operand: string, equates: Record<string, { value: string 
   if (trimmed === 'rmp0') return 38; // LFO ramp 0
   if (trimmed === 'rmp1') return 39; // LFO ramp 1
   
+  // POT registers (runtime-resolved, use placeholder indices)
+  if (trimmed === 'pot0') return 40; // POT0 placeholder
+  if (trimmed === 'pot1') return 41; // POT1 placeholder
+  if (trimmed === 'pot2') return 42; // POT2 placeholder
+  
   // Named registers: reg0-reg31
   const regMatch = trimmed.match(/^reg(\d+)$/);
   if (regMatch) {
@@ -200,20 +205,20 @@ function parseAddress(operand: string, symbols: Record<string, number>): number 
     return parseInt(numMatch[1], 10);
   }
   
-  // Label reference with # suffix
+  // Label reference with # suffix (e.g., "delay#")
   const labelMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)#$/);
   if (labelMatch) {
-    const label = labelMatch[1];
+    const label = labelMatch[1].toLowerCase();
     if (!(label in symbols)) {
       throw new Error(`Unresolved label: ${label}`);
     }
     return symbols[label];
   }
   
-  // Expression: label#+offset
+  // Expression: label#+offset (e.g., "delay#+100")
   const exprMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)#([+\-])(\d+)$/);
   if (exprMatch) {
-    const label = exprMatch[1];
+    const label = exprMatch[1].toLowerCase();
     const op = exprMatch[2];
     const offset = parseInt(exprMatch[3], 10);
     
@@ -223,6 +228,13 @@ function parseAddress(operand: string, symbols: Record<string, number>): number 
     
     const base = symbols[label];
     return op === '+' ? base + offset : base - offset;
+  }
+  
+  // Bare symbol name without suffix (e.g., "delay")
+  // This is common in WRA/RDA instructions
+  const bareSymbol = trimmed.toLowerCase();
+  if (bareSymbol in symbols) {
+    return symbols[bareSymbol];
   }
   
   throw new Error(`Invalid address: ${operand}`);
@@ -476,7 +488,7 @@ export function compileProgram(
   const memoryAddresses: Record<string, number> = {};
   let currentMemAddr = 0;
   for (const [name, symbol] of Object.entries(parseResult.symbols.memory)) {
-    memoryAddresses[name] = currentMemAddr;
+    memoryAddresses[name.toLowerCase()] = currentMemAddr;
     // Parse size and advance pointer
     const size = parseInt(symbol.size, 10);
     if (!isNaN(size)) {
