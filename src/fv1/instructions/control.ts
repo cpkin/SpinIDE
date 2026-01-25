@@ -21,22 +21,23 @@ import type { InstructionHandler, FV1State } from '../types';
  * - NEG: Skip if ACC < 0
  * - ZRC: Skip on zero-crossing
  * 
- * Note: SKP affects program counter, which requires special handling
- * in the interpreter loop. For now, we store the skip count in a
- * special state field that the interpreter will check.
+ * SKP affects program counter by setting state.nextPc.
+ * The interpreter loop checks nextPc and jumps accordingly.
  * 
  * Operands:
  * - operands[0]: Condition flags (bitfield)
  * - operands[1]: Number of instructions to skip (0-63)
+ * - operands[2]: Current PC (injected by interpreter)
  * 
  * Reference: http://www.spinsemi.com/knowledge_base/inst_syntax.html#SKP
  */
 export const skp: InstructionHandler = (state: FV1State, operands: number[]) => {
   const flags = operands[0];
-  // Skip count is operands[1], but handled by interpreter loop
+  const skipCount = operands[1];
+  const currentPc = operands[2] || 0;
   
   // Condition flag bits:
-  // 0x01 = RUN (always execute)
+  // 0x01 = RUN (always execute, never skip)
   // 0x02 = ZRO (skip if ACC == 0)
   // 0x04 = GEZ (skip if ACC >= 0)
   // 0x08 = NEG (skip if ACC < 0)
@@ -70,38 +71,29 @@ export const skp: InstructionHandler = (state: FV1State, operands: number[]) => 
     shouldSkip = shouldSkip || crossedZero;
   }
   
-  // Store skip count if condition is met
-  // The interpreter loop will need to check this and advance PC accordingly
+  // Set nextPc if condition is met
   if (shouldSkip) {
-    // Note: This requires adding a skipCount field to FV1State
-    // For now, we'll handle this differently - SKP must be handled
-    // specially in the interpreter loop, not here
-    // TODO: Refactor interpreter to handle SKP properly
+    // Skip forward by skipCount instructions
+    state.nextPc = currentPc + skipCount + 1;
   }
-  
-  // For now, SKP is a no-op at the handler level
-  // The interpreter must check condition flags and skip instructions
 };
 
 /**
  * JMP: Jump to address (unconditional)
  * 
- * JMP is implemented as SKP with RUN flag and skip count.
+ * JMP is implemented as an unconditional jump to a target address.
+ * The compiler resolves label to instruction address.
  * 
  * Operands:
  * - operands[0]: Target address (0-127)
  * 
- * Note: Like SKP, JMP requires special handling in the interpreter loop.
- * 
  * Reference: http://www.spinsemi.com/knowledge_base/inst_syntax.html#JMP
  */
-export const jmp: InstructionHandler = (_state: FV1State, _operands: number[]) => {
-  // JMP is handled specially by the interpreter
-  // The compiler should convert JMP to SKP with appropriate flags
-  // This handler is a no-op
+export const jmp: InstructionHandler = (state: FV1State, operands: number[]) => {
+  const targetAddress = operands[0];
   
-  // Note: The interpreter must check for JMP and set PC directly
-  // TODO: Refactor interpreter to handle JMP properly
+  // Unconditional jump - set nextPc to target
+  state.nextPc = targetAddress;
 };
 
 /**

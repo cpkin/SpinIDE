@@ -70,6 +70,7 @@ export function createState(
       rmp0Amp: 0.0,
       rmp1Amp: 0.0,
     },
+    nextPc: null,
   };
 }
 
@@ -128,6 +129,9 @@ export function resetState(state: FV1State): void {
   state.lfo.sin1Amp = 0.0;
   state.lfo.rmp0Amp = 0.0;
   state.lfo.rmp1Amp = 0.0;
+  
+  // Reset control flow
+  state.nextPc = null;
   
   // POT values are preserved (user control)
   // IO mode is preserved (program configuration)

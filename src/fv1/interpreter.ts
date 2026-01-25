@@ -118,12 +118,28 @@ function executeSample(
   // Execute up to 128 instructions
   const instructionCount = Math.min(program.instructions.length, INSTRUCTIONS_PER_SAMPLE);
   
-  for (let pc = 0; pc < instructionCount; pc++) {
+  // Reset nextPc before instruction loop
+  state.nextPc = null;
+  
+  for (let pc = 0; pc < instructionCount; ) {
     const instruction = program.instructions[pc];
     const handler = getHandler(instruction.opcode);
     
+    // For SKP instruction, inject current PC as third operand
+    const operands = instruction.opcode === 'skp' 
+      ? [...instruction.operands, pc]
+      : instruction.operands;
+    
     // Execute instruction (modifies state in place)
-    handler(state, instruction.operands);
+    handler(state, operands);
+    
+    // Check if instruction set nextPc (SKP/JMP control flow)
+    if (state.nextPc !== null) {
+      pc = state.nextPc;
+      state.nextPc = null; // Clear for next instruction
+    } else {
+      pc++; // Normal sequential execution
+    }
   }
   
   // After all instructions, output is in ACC

@@ -157,6 +157,13 @@ export interface FV1State {
     rmp0Amp: number;
     rmp1Amp: number;
   };
+
+  /**
+   * Next program counter for SKP/JMP instructions
+   * If set to non-null, interpreter will jump to this PC
+   * SKP/JMP handlers set this field to signal control flow change
+   */
+  nextPc: number | null;
 }
 
 /**
