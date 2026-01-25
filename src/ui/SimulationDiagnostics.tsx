@@ -3,7 +3,13 @@ import { useAudioStore } from '../store/audioStore'
 import { runOfficialCorpus } from '../fv1/validation/corpusRunner'
 
 export default function SimulationDiagnostics() {
-  const { corpusStatus, corpusResult, setCorpusStatus, setCorpusResult } = useAudioStore()
+  const { 
+    corpusStatus, 
+    corpusResult, 
+    renderResult, 
+    setCorpusStatus, 
+    setCorpusResult 
+  } = useAudioStore()
   const [expanded, setExpanded] = useState(false)
   
   useEffect(() => {
@@ -24,6 +30,18 @@ export default function SimulationDiagnostics() {
       runValidation()
     }
   }, [corpusStatus, setCorpusStatus, setCorpusResult])
+  
+  const handleRunCorpus = async () => {
+    setCorpusStatus('running')
+    try {
+      const result = await runOfficialCorpus()
+      setCorpusResult(result)
+      setCorpusStatus('complete')
+    } catch (error) {
+      console.error('Corpus validation failed:', error)
+      setCorpusStatus('error')
+    }
+  }
   
   if (corpusStatus === 'idle' || corpusStatus === 'running') {
     return (
@@ -55,6 +73,7 @@ export default function SimulationDiagnostics() {
   
   const { total, passed, failed, errors } = corpusResult
   const passRate = total > 0 ? Math.round((passed / total) * 100) : 0
+  const slowRenderWarning = renderResult?.warnings.find(w => w.code === 'slow-render')
   
   return (
     <section className="diagnostics-panel">
@@ -69,10 +88,44 @@ export default function SimulationDiagnostics() {
         </button>
       </div>
       
-      <div className="corpus-summary">
+      {/* Render Performance */}
+      {renderResult && (
+        <div className="diagnostics-section">
+          <h3 className="section-title">Last Render</h3>
+          <div className="diagnostics-stats">
+            <div className="stat-item">
+              <span className="stat-label">Elapsed Time</span>
+              <span className="stat-value">{renderResult.elapsedMs.toFixed(0)} ms</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Duration</span>
+              <span className="stat-value">{renderResult.duration.toFixed(1)} s</span>
+            </div>
+          </div>
+          {slowRenderWarning && (
+            <div className="diagnostics-warning">
+              ⚠️ {slowRenderWarning.message}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Corpus Validation */}
+      <div className="diagnostics-section">
+        <div className="section-header">
+          <h3 className="section-title">Corpus Validation</h3>
+          <button
+            className="run-corpus-button"
+            onClick={handleRunCorpus}
+            type="button"
+          >
+            Re-run Validation
+          </button>
+        </div>
+        
         <div className="corpus-stats">
           <div className="stat-item">
-            <span className="stat-label">Corpus Tests</span>
+            <span className="stat-label">Tests</span>
             <span className="stat-value">{total}</span>
           </div>
           <div className="stat-item">
