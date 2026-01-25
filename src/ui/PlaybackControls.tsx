@@ -7,15 +7,17 @@ export default function PlaybackControls() {
   const animationFrameRef = useRef<number | null>(null)
   
   const outputBuffer = useAudioStore((state) => state.outputBuffer)
-  const { isPlaying, setPlaying, setPlayheadTime, setDuration } = usePlaybackStore()
+  const { isPlaying, isLooping, setPlaying, setPlayheadTime, setDuration, setIsLooping, setLoopRegion } = usePlaybackStore()
 
-  // Set buffer when output changes
+  // Set buffer when output changes and reset loop region
   useEffect(() => {
     if (outputBuffer) {
       playbackManager.setBuffer(outputBuffer)
       setDuration(outputBuffer.duration)
+      setLoopRegion(0, outputBuffer.duration)
+      setIsLooping(false)
     }
-  }, [outputBuffer, setDuration])
+  }, [outputBuffer, setDuration, setLoopRegion, setIsLooping])
 
   // Animation frame loop for playhead updates
   useEffect(() => {
@@ -61,6 +63,14 @@ export default function PlaybackControls() {
     }
   }
 
+  const handleToggleLoop = () => {
+    if (!outputBuffer) return
+    
+    const newLoopState = !isLooping
+    setIsLooping(newLoopState)
+    playbackManager.setLooping(newLoopState)
+  }
+
   const disabled = !outputBuffer
 
   return (
@@ -73,6 +83,15 @@ export default function PlaybackControls() {
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? '⏸' : '▶'}
+      </button>
+      <button
+        className={`loop-button ${isLooping ? 'loop-active' : ''}`}
+        onClick={handleToggleLoop}
+        disabled={disabled}
+        type="button"
+        aria-label={isLooping ? 'Disable Loop' : 'Enable Loop'}
+      >
+        🔁
       </button>
     </div>
   )
