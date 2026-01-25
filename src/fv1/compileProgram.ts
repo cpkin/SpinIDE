@@ -40,10 +40,16 @@ export class CompilationError extends Error {
  * Parses a register operand (REG0-REG31, ADCL, ADCR, DACL, DACR)
  * 
  * @param operand - Register name or index
+ * @param equates - Equate symbol table for resolving symbolic names
  * @returns Register index (0-31) or special register value
  */
-function parseRegister(operand: string): number {
-  const trimmed = operand.trim().toLowerCase();
+function parseRegister(operand: string, equates: Record<string, { value: string }>): number {
+  let trimmed = operand.trim().toLowerCase();
+  
+  // Resolve equates first (e.g., "input" -> "ADCL")
+  if (trimmed in equates) {
+    trimmed = equates[trimmed].value.toLowerCase();
+  }
   
   // Special registers (ADC/DAC are mapped to virtual registers)
   if (trimmed === 'adcl') return 32; // Virtual register for ADC left
@@ -228,12 +234,14 @@ function parseAddress(operand: string, symbols: Record<string, number>): number 
  * @param instruction - Parsed instruction from parser
  * @param labelAddresses - Map of label names to instruction addresses
  * @param memoryAddresses - Map of memory symbol names to delay RAM addresses
+ * @param equates - Equate symbol table for resolving symbolic names
  * @returns Compiled instruction ready for execution
  */
 function compileInstruction(
   instruction: ParsedInstruction,
   labelAddresses: Record<string, number>,
   memoryAddresses: Record<string, number>,
+  equates: Record<string, { value: string }>,
 ): CompiledInstruction {
   const opcode = instruction.opcode.toLowerCase();
   const operands: number[] = [];
@@ -249,7 +257,7 @@ function compileInstruction(
       case 'wrlx':
       case 'maxx':
         if (instruction.operands.length >= 1) {
-          operands.push(parseRegister(instruction.operands[0]));
+          operands.push(parseRegister(instruction.operands[0], equates));
         }
         if (instruction.operands.length >= 2) {
           operands.push(parseCoefficient(instruction.operands[1]));
@@ -260,7 +268,7 @@ function compileInstruction(
       case 'ldax':
       case 'mulx':
         if (instruction.operands.length >= 1) {
-          operands.push(parseRegister(instruction.operands[0]));
+          operands.push(parseRegister(instruction.operands[0], equates));
         }
         break;
       
@@ -476,6 +484,12 @@ export function compileProgram(
     }
   }
   
+  // Build equates map
+  const equates: Record<string, { value: string }> = {};
+  for (const [name, symbol] of Object.entries(parseResult.symbols.equates)) {
+    equates[name.toLowerCase()] = { value: symbol.value };
+  }
+  
   // Compile each instruction
   const compiledInstructions: CompiledInstruction[] = [];
   for (const instruction of parseResult.instructions) {
@@ -491,6 +505,7 @@ export function compileProgram(
       instruction,
       labelAddresses,
       memoryAddresses,
+      equates,
     );
     compiledInstructions.push(compiled);
   }
