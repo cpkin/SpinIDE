@@ -215,8 +215,23 @@ function parseAddress(operand: string, symbols: Record<string, number>): number 
     return symbols[label];
   }
   
-  // Expression: label#+offset (e.g., "delay#+100")
-  const exprMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)#([+\-])(\d+)$/);
+  // Expression with # separator: label#+offset (e.g., "delay#+100")
+  const exprHashMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)#([+\-])(\d+)$/);
+  if (exprHashMatch) {
+    const label = exprHashMatch[1].toLowerCase();
+    const op = exprHashMatch[2];
+    const offset = parseInt(exprHashMatch[3], 10);
+    
+    if (!(label in symbols)) {
+      throw new Error(`Unresolved label: ${label}`);
+    }
+    
+    const base = symbols[label];
+    return op === '+' ? base + offset : base - offset;
+  }
+  
+  // Expression without # separator: label+offset (e.g., "delay+100")
+  const exprMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)([+\-])(\d+)$/);
   if (exprMatch) {
     const label = exprMatch[1].toLowerCase();
     const op = exprMatch[2];
