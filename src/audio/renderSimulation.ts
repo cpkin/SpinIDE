@@ -8,7 +8,7 @@ import {
 import { getHandler } from '../fv1/instructions';
 import { createState, resetState, updatePots } from '../fv1/state';
 import type { CompiledProgram, FV1State } from '../fv1/types';
-import { mapInputToADC } from '../fv1/io';
+import { mapInputToADC, normalizeInput } from '../fv1/io';
 import {
   RenderCancelledError,
   type RenderSimulationRequest,
@@ -56,6 +56,26 @@ interface CachedInstruction {
   handler: (state: FV1State, operands: number[]) => void;
   operands: number[];
   opcode: string;
+}
+
+const TWO_PI = Math.PI * 2;
+
+function wrapPhase(phase: number): number {
+  return phase - Math.floor(phase);
+}
+
+function updateLfoState(state: FV1State): void {
+  const lfo = state.lfo;
+
+  lfo.sin0Phase = wrapPhase(lfo.sin0Phase + lfo.sin0Rate);
+  lfo.sin1Phase = wrapPhase(lfo.sin1Phase + lfo.sin1Rate);
+  lfo.rmp0Phase = wrapPhase(lfo.rmp0Phase + lfo.rmp0Rate);
+  lfo.rmp1Phase = wrapPhase(lfo.rmp1Phase + lfo.rmp1Rate);
+
+  lfo.sin0 = Math.sin(lfo.sin0Phase * TWO_PI);
+  lfo.sin1 = Math.sin(lfo.sin1Phase * TWO_PI);
+  lfo.rmp0 = lfo.rmp0Phase;
+  lfo.rmp1 = lfo.rmp1Phase;
 }
 
 function executeSample(
@@ -278,8 +298,10 @@ export async function renderSimulation(
       updatePots(state, request.pots);
     }
 
-    const inL = inputL[sample] ?? 0;
-    const inR = inputR[sample] ?? inL;
+    const inL = normalizeInput(inputL[sample] ?? 0, false);
+    const inR = normalizeInput(inputR[sample] ?? inL, false);
+
+    updateLfoState(state);
 
     if (program.ioMode !== 'mono_mono') {
       state.lr = 0;
