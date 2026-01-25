@@ -10,6 +10,9 @@ class PlaybackManager {
   private buffer: AudioBuffer | null = null
   private startTime = 0
   private pausedAt = 0
+  private loopStart = 0
+  private loopEnd = 0
+  private isLooping = false
 
   /**
    * Initialize or resume AudioContext
@@ -31,6 +34,7 @@ class PlaybackManager {
   setBuffer(buffer: AudioBuffer) {
     this.buffer = buffer
     this.pausedAt = 0
+    this.loopEnd = buffer.duration
   }
 
   /**
@@ -45,6 +49,9 @@ class PlaybackManager {
     
     this.source = context.createBufferSource()
     this.source.buffer = this.buffer
+    this.source.loop = this.isLooping
+    this.source.loopStart = this.loopStart
+    this.source.loopEnd = this.loopEnd
     this.source.connect(context.destination)
     
     this.startTime = context.currentTime - this.pausedAt
@@ -121,6 +128,32 @@ class PlaybackManager {
    */
   getDuration(): number {
     return this.buffer?.duration ?? 0
+  }
+
+  /**
+   * Set loop region boundaries
+   */
+  setLoopRegion(start: number, end: number) {
+    this.loopStart = start
+    this.loopEnd = end
+    
+    // Update existing source if playing
+    if (this.source) {
+      this.source.loopStart = start
+      this.source.loopEnd = end
+    }
+  }
+
+  /**
+   * Enable or disable looping
+   */
+  setLooping(enabled: boolean) {
+    this.isLooping = enabled
+    
+    // Update existing source if playing
+    if (this.source) {
+      this.source.loop = enabled
+    }
   }
 }
 

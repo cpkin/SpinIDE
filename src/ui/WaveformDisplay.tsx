@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { IOMode } from '../fv1/types'
 import { playbackManager } from '../audio/playbackManager'
 import { usePlaybackStore } from '../store/playbackStore'
+import LoopRegion from './LoopRegion'
 
 interface WaveformDisplayProps {
   audioBuffer: AudioBuffer | null
@@ -16,6 +17,7 @@ export default function WaveformDisplay({
 }: WaveformDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -29,6 +31,9 @@ export default function WaveformDisplay({
     canvas.height = rect.height * dpr
     canvas.style.width = `${rect.width}px`
     canvas.style.height = `${rect.height}px`
+
+    // Update container size for LoopRegion
+    setContainerSize({ width: rect.width, height: rect.height })
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -169,6 +174,13 @@ export default function WaveformDisplay({
         onClick={handleWaveformClick}
         style={{ cursor: 'pointer' }}
       />
+      {containerSize.width > 0 && containerSize.height > 0 && (
+        <LoopRegion 
+          duration={audioBuffer.duration}
+          width={containerSize.width}
+          height={containerSize.height}
+        />
+      )}
     </div>
   )
 }

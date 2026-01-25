@@ -954,6 +954,7 @@ body {
 
 /* Waveform Display */
 .waveform-container {
+  position: relative;
   width: 100%;
   height: 200px;
   border-radius: 12px;
@@ -966,6 +967,51 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* Loop Region Overlay */
+.loop-region-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.loop-region-background {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(59, 130, 246, 0.15);
+  pointer-events: none;
+}
+
+.loop-handle {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 12px;
+  margin-left: -6px;
+  pointer-events: all;
+  cursor: grab;
+  z-index: 10;
+}
+
+.loop-handle:active {
+  cursor: grabbing;
+}
+
+.loop-handle-line {
+  width: 4px;
+  height: 100%;
+  margin: 0 auto;
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.loop-handle:hover .loop-handle-line {
+  background: #60a5fa;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
 }
 
 .waveform-placeholder {
