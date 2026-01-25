@@ -18,6 +18,7 @@ export interface CorpusTestResult {
   metrics?: AudioMetrics
   errors: string[]
   duration?: number
+  renderedBuffer?: AudioBuffer  // For playback/debugging
 }
 
 export interface CorpusRunResult {
@@ -123,6 +124,7 @@ async function runCorpusTest(
         metrics,
         errors: comparison.errors,
         duration: performance.now() - startTime,
+        renderedBuffer: result.buffer,
       }
     }
     
@@ -138,6 +140,7 @@ async function runCorpusTest(
       metrics,
       errors,
       duration: performance.now() - startTime,
+      renderedBuffer: result.buffer,
     }
   } catch (error) {
     return {

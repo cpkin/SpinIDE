@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAudioStore } from '../store/audioStore'
 import { runOfficialCorpus } from '../fv1/validation/corpusRunner'
 
@@ -11,6 +11,9 @@ export default function SimulationDiagnostics() {
     setCorpusResult 
   } = useAudioStore()
   const [expanded, setExpanded] = useState(false)
+  const [playingTest, setPlayingTest] = useState<string | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null)
   
   useEffect(() => {
     // Run corpus validation on mount
@@ -40,6 +43,42 @@ export default function SimulationDiagnostics() {
     } catch (error) {
       console.error('Corpus validation failed:', error)
       setCorpusStatus('error')
+    }
+  }
+  
+  const handlePlayTest = (testName: string, buffer: AudioBuffer | undefined) => {
+    if (!buffer) return
+    
+    // Stop any currently playing audio
+    if (currentSourceRef.current) {
+      currentSourceRef.current.stop()
+      currentSourceRef.current = null
+    }
+    
+    // Create audio context if needed
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext()
+    }
+    
+    // Play the buffer
+    const source = audioContextRef.current.createBufferSource()
+    source.buffer = buffer
+    source.connect(audioContextRef.current.destination)
+    source.onended = () => {
+      setPlayingTest(null)
+      currentSourceRef.current = null
+    }
+    source.start()
+    
+    currentSourceRef.current = source
+    setPlayingTest(testName)
+  }
+  
+  const handleStopTest = () => {
+    if (currentSourceRef.current) {
+      currentSourceRef.current.stop()
+      currentSourceRef.current = null
+      setPlayingTest(null)
     }
   }
   
@@ -161,6 +200,7 @@ export default function SimulationDiagnostics() {
                 <th>Program</th>
                 <th>Status</th>
                 <th>Duration</th>
+                <th>Listen</th>
               </tr>
             </thead>
             <tbody>
@@ -174,6 +214,27 @@ export default function SimulationDiagnostics() {
                   </td>
                   <td className="result-duration">
                     {result.duration ? `${result.duration.toFixed(0)}ms` : '-'}
+                  </td>
+                  <td className="result-actions">
+                    {result.renderedBuffer && (
+                      playingTest === result.name ? (
+                        <button 
+                          onClick={handleStopTest}
+                          className="play-button playing"
+                          title="Stop playback"
+                        >
+                          ⏹
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handlePlayTest(result.name, result.renderedBuffer)}
+                          className="play-button"
+                          title="Listen to rendered output"
+                        >
+                          ▶
+                        </button>
+                      )
+                    )}
                   </td>
                 </tr>
               ))}
