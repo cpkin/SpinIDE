@@ -1,7 +1,7 @@
 # Project State: SpinGPT
 
-**Last Updated:** 2026-01-23
-**Status:** Phase 2 In Progress (2/6 plans complete)
+**Last Updated:** 2026-01-25
+**Status:** Phase 2 In Progress (7/10 plans complete)
 
 ---
 
@@ -11,23 +11,23 @@
 Paste .spn code → hear simulated audio in under 2 seconds. Catch bugs before burning EEPROMs.
 
 ### Current Focus
-Building Phase 2 audio simulation engine: FV-1 fixed-point core complete, implementing opcode handlers next.
+Closing remaining FV-1 opcode gaps and validating modulation behavior.
 
 ---
 
 ## Current Position
 
 Phase: 2 of 5 (Audio Simulation Engine)
-Plan: 6 of 6 in current phase
-Status: Phase complete
-Last activity: 2026-01-23 - Completed 02-06-PLAN.md
+Plan: 7 of 10 in current phase
+Status: In progress
+Last activity: 2026-01-25 - Completed 02-07-PLAN.md
 
 ### Progress
 ```
 Phase 0: [████████████████████] 3/3 plans (100%)
 Phase 1: [████████████████████] 4/4 plans (100%)
-Phase 2: [████████████████████] 6/6 plans (100%)
-Overall: [█████████████████░░░] 13/13 plans (100%)
+Phase 2: [██████████████░░░░░░] 7/10 plans (70%)
+Overall: [████████████████░░░░] 14/17 plans (82%)
 ```
 
 ---
@@ -35,7 +35,7 @@ Overall: [█████████████████░░░] 13/13 pl
 ## Performance Metrics
 
 ### Velocity
-- **Plans completed:** 13
+- **Plans completed:** 14
 - **Requirements completed:** 32/50 (64%)
 - **Phases completed:** 2.0/5 (40%)
 
@@ -45,7 +45,7 @@ Overall: [█████████████████░░░] 13/13 pl
 - **Test coverage:** Not yet applicable
 
 ### Efficiency
-- **Avg time per plan:** 4 min (2 + 6 + 0 + 0 + 11 + 8 + 9 + 4 + 6 + 2 + 2 + 1 + 5 = 56 min / 13 plans)
+- **Avg time per plan:** 6 min (2 + 6 + 0 + 0 + 11 + 8 + 9 + 4 + 6 + 2 + 2 + 1 + 5 + 21 = 77 min / 14 plans)
 - **Replanning rate:** 0%
 
 ---
@@ -77,6 +77,8 @@ Overall: [█████████████████░░░] 13/13 pl
 | 2026-01-23 | Store baseline metrics in JSON with tolerance-based comparison | Peak ±0.01, RMS ±0.01 tolerance for stability | Corpus validation robust to minor floating-point differences |
 | 2026-01-23 | First-run modal with localStorage persistence | Prevents repeated fidelity disclaimer after initial acknowledgment | User sees fidelity notice once, not on every session |
 | 2026-01-23 | Analyze compiled instructions for runtime warnings | Flags LOG/EXP, heavy delay RAM usage after compilation | Avoids false positives from unexecuted code paths |
+| 2026-01-25 | Scale LFO amplitude via gain constants and delay scales | Keep LFO register values in fixed-point bounds while supporting modulation depth | LFO opcodes produce consistent modulation |
+| 2026-01-25 | Advance LFO phases once per sample | Prevent stereo passes from double-advancing modulation | LFOs stay in sync across channels |
 
 ### Active Todos
 None
@@ -88,21 +90,19 @@ None
 
 ## Session Continuity
 
-Last session: 2026-01-23T21:35:11Z
-Stopped at: Completed 02-06-PLAN.md (Phase 2 complete)
+Last session: 2026-01-25T16:53:26Z
+Stopped at: Completed 02-07-PLAN.md
 Resume file: None
 
 ### What Just Happened
-- Completed Plan 02-06: Corpus validation and fidelity messaging (Phase 2 complete!)
-- Added official corpus runner with automated pass/fail reporting
-- Created first-run fidelity modal explaining audition-quality simulation
-- Implemented runtime warnings for risky opcodes (LOG/EXP, heavy delay RAM)
-- All 6 plans in Phase 2 complete
+- Completed Plan 02-07: LFO state tracking and modulation opcodes
+- Added per-sample LFO phase updates with WLDS/WLDR/JAM/CHO handling
+- Wired LFO-aware delay modulation and special register reads
 
 ### What's Next
-1. Execute Plan 02-02: Arithmetic Opcodes (RDAX, SOF, MULX, etc.) - DEFERRED, incomplete opcodes
-2. Move to Phase 3: Audio Interaction & Export (waveform visualization, knobs, playback)
-3. Phase 2 complete but opcode implementation incomplete (02-02 deferred)
+1. Execute Plan 02-08: next Phase 2 gap-closure plan
+2. Run manual LFO demo spot-check (auto-pan.spn) to confirm modulation
+3. Continue Phase 2 plans 02-09 and 02-10 before Phase 3 transition
 
 ### Context for Next Session
 - **Project:** Browser-based FV-1 SpinASM validator and audio simulator

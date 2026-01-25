@@ -14,7 +14,7 @@ SpinGPT delivers a browser-based FV-1 SpinASM validator and audio simulator thro
 
 **Goal:** Specifications and test corpus locked; development can proceed with confidence
 
-**Status:** Complete (2026-01-23)
+**Status:** In progress
 
 **Dependencies:** None (kickoff phase)
 
@@ -116,7 +116,7 @@ Plans:
 6. Simulator passes validation against all official Spin demo programs from test corpus
 7. UI displays simulation limitations and known deviations from hardware behavior
 
-**Plans:** 6 plans
+**Plans:** 10 plans
 
 Plans:
 - [x] 02-01-PLAN.md — Build FV-1 fixed-point core and interpreter skeleton
@@ -125,6 +125,10 @@ Plans:
 - [x] 02-04-PLAN.md — Build simulation panel UI and editor render wiring
 - [x] 02-05-PLAN.md — Add demo assets and layout styling
 - [x] 02-06-PLAN.md — Add corpus validation harness and fidelity messaging
+- [x] 02-07-PLAN.md — Implement LFO state tracking and modulation opcodes
+- [ ] 02-08-PLAN.md — TBD
+- [ ] 02-09-PLAN.md — TBD
+- [ ] 02-10-PLAN.md — TBD
 
 ---
 
@@ -187,7 +191,7 @@ Plans:
 |-------|--------|----------|-----------|
 | 0 - Foundation & Test Infrastructure | Complete | 6/6 requirements | 2026-01-22 |
 | 1 - Code Validation & Analysis | Complete | 15/15 requirements | 2026-01-23 |
-| 2 - Audio Simulation Engine | Complete | 8/12 requirements | 2026-01-23 |
+| 2 - Audio Simulation Engine | In progress | 8/12 requirements | — |
 | 3 - Audio Interaction & Export | Not Started | 0/12 requirements | — |
 | 4 - Signal Path Diagrams | Not Started | 0/5 requirements | — |
 
