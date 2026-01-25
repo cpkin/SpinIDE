@@ -30,6 +30,7 @@ export interface RenderSimulationResult {
   warnings: RenderWarning[];
   resampleNote: string;
   normalizedPeak: number;
+  elapsedMs: number;
 }
 
 export class RenderCancelledError extends Error {

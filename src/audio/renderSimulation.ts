@@ -146,6 +146,8 @@ function resolveRenderLengthSeconds(
 export async function renderSimulation(
   request: RenderSimulationRequest,
 ): Promise<RenderSimulationResult> {
+  const renderStartTime = performance.now();
+
   if (request.abortSignal?.aborted) {
     throw new RenderCancelledError();
   }
@@ -258,6 +260,9 @@ export async function renderSimulation(
   source.start(0);
   const rendered = await offlineContext.startRendering();
 
+  const renderEndTime = performance.now();
+  const elapsedMs = renderEndTime - renderStartTime;
+
   return {
     buffer: rendered,
     duration: rendered.duration,
@@ -265,5 +270,6 @@ export async function renderSimulation(
     warnings,
     resampleNote: resampled.note,
     normalizedPeak,
+    elapsedMs,
   };
 }
