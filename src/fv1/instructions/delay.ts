@@ -15,7 +15,17 @@
 
 import type { InstructionHandler, FV1State } from '../types';
 import { saturatingAdd, saturatingMul, clampRDACoeff } from '../fixedPoint';
-import { MAX_DELAY_RAM } from '../constants';
+import { MAX_DELAY_RAM, LFO_SIN_DELAY_SCALE, LFO_RMP_DELAY_SCALE } from '../constants';
+
+function readDelayInterpolated(state: FV1State, address: number): number {
+  const wrapped = ((address % MAX_DELAY_RAM) + MAX_DELAY_RAM) % MAX_DELAY_RAM;
+  const index = Math.floor(wrapped);
+  const next = (index + 1) % MAX_DELAY_RAM;
+  const fraction = wrapped - index;
+  const current = state.delayRam[index];
+  const nextValue = state.delayRam[next];
+  return current + (nextValue - current) * fraction;
+}
 
 /**
  * RDA: Read from delay RAM, multiply, and add to ACC
@@ -54,11 +64,15 @@ export const rda: InstructionHandler = (state: FV1State, operands: number[]) => 
  */
 export const rmpa: InstructionHandler = (state: FV1State, operands: number[]) => {
   const coeff = clampRDACoeff(operands[0]);
-  
-  // TODO: Implement LFO modulation when CHO instruction is complete
-  // For now, read from current write pointer position (unmodulated)
-  const address = state.delayWritePtr % MAX_DELAY_RAM;
-  const delayValue = state.delayRam[address];
+
+  const useSineLfo = state.lfo.sin0Amp !== 0 || state.lfo.sin0Rate !== 0;
+  const normalized = useSineLfo ? state.lfo.sin0 : state.lfo.rmp0;
+  const amplitude = useSineLfo ? state.lfo.sin0Amp : state.lfo.rmp0Amp;
+  const delayScale = useSineLfo ? LFO_SIN_DELAY_SCALE : LFO_RMP_DELAY_SCALE;
+  const offset = normalized * amplitude * delayScale;
+
+  const address = state.delayWritePtr + offset;
+  const delayValue = readDelayInterpolated(state, address);
   const product = saturatingMul(delayValue, coeff);
   state.acc = saturatingAdd(state.acc, product);
 };

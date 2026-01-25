@@ -50,6 +50,10 @@ function parseRegister(operand: string): number {
   if (trimmed === 'adcr') return 33; // Virtual register for ADC right
   if (trimmed === 'dacl') return 34; // Virtual register for DAC left
   if (trimmed === 'dacr') return 35; // Virtual register for DAC right
+  if (trimmed === 'sin0') return 36; // LFO sine 0
+  if (trimmed === 'sin1') return 37; // LFO sine 1
+  if (trimmed === 'rmp0') return 38; // LFO ramp 0
+  if (trimmed === 'rmp1') return 39; // LFO ramp 1
   
   // Named registers: reg0-reg31
   const regMatch = trimmed.match(/^reg(\d+)$/);
@@ -70,6 +74,59 @@ function parseRegister(operand: string): number {
   }
   
   throw new Error(`Invalid register: ${operand}`);
+}
+
+function parseLfoSelector(operand: string, type: 'sin' | 'rmp' | 'any'): number {
+  const trimmed = operand.trim().toLowerCase();
+
+  const supportedTypes = type === 'any' ? ['sin', 'rmp'] : [type];
+  for (const prefix of supportedTypes) {
+    if (trimmed.startsWith(prefix)) {
+      const index = parseInt(trimmed.slice(prefix.length), 10);
+      if (index === 0 || index === 1) {
+        if (type === 'any' && prefix === 'rmp') {
+          return index + 2;
+        }
+        return index;
+      }
+    }
+  }
+
+  const numeric = parseInt(trimmed, 10);
+  if (numeric === 0 || numeric === 1) {
+    return numeric;
+  }
+
+  throw new Error(`Invalid LFO selector: ${operand}`);
+}
+
+function parseChoMode(operand: string): number {
+  const trimmed = operand.trim().toLowerCase();
+
+  if (trimmed === 'rda') return 0;
+  if (trimmed === 'sof') return 1;
+  if (trimmed === 'rdal') return 2;
+
+  throw new Error(`Invalid CHO mode: ${operand}`);
+}
+
+function parseChoFlags(operand: string): number {
+  const trimmed = operand.trim();
+  if (!trimmed) return 0;
+
+  const normalized = trimmed.toLowerCase();
+  if (normalized === '0') return 0;
+
+  return normalized.split('|').reduce((flags, flag) => {
+    const cleaned = flag.trim();
+    if (cleaned === 'reg') return flags | 1;
+    if (cleaned === 'compc') return flags | 2;
+    const numeric = parseInt(cleaned, 10);
+    if (!Number.isNaN(numeric)) {
+      return flags | numeric;
+    }
+    return flags;
+  }, 0);
 }
 
 /**
@@ -306,15 +363,22 @@ function compileInstruction(
       case 'wlds':
       case 'wldr':
         // Parse: lfo_select, frequency, amplitude
-        for (let i = 0; i < Math.min(3, instruction.operands.length); i++) {
-          operands.push(parseCoefficient(instruction.operands[i]));
+        if (instruction.operands.length >= 1) {
+          const type = opcode === 'wlds' ? 'sin' : 'rmp';
+          operands.push(parseLfoSelector(instruction.operands[0], type));
+        }
+        if (instruction.operands.length >= 2) {
+          operands.push(parseCoefficient(instruction.operands[1]));
+        }
+        if (instruction.operands.length >= 3) {
+          operands.push(parseCoefficient(instruction.operands[2]));
         }
         break;
       
       case 'jam':
         // Parse: lfo_select
         if (instruction.operands.length >= 1) {
-          operands.push(parseCoefficient(instruction.operands[0]));
+          operands.push(parseLfoSelector(instruction.operands[0], 'rmp'));
         }
         break;
       
@@ -328,6 +392,28 @@ function compileInstruction(
       
       // Special/complex instructions
       case 'cho':
+        if (instruction.operands.length >= 1) {
+          const mode = parseChoMode(instruction.operands[0]);
+          operands.push(mode);
+        }
+        if (instruction.operands.length >= 2) {
+          const lfoSelect = parseLfoSelector(instruction.operands[1], 'any');
+          operands.push(lfoSelect);
+        }
+        if (instruction.operands.length >= 3) {
+          operands.push(parseChoFlags(instruction.operands[2]));
+        }
+        if (instruction.operands.length >= 4) {
+          if (instruction.operands[0].trim().toLowerCase() === 'sof') {
+            operands.push(parseCoefficient(instruction.operands[3]));
+          } else {
+            operands.push(parseAddress(instruction.operands[3], memoryAddresses));
+          }
+        }
+        if (instruction.operands.length >= 5 && instruction.operands[0].trim().toLowerCase() === 'sof') {
+          operands.push(parseCoefficient(instruction.operands[4]));
+        }
+        break;
       case 'raw':
         // Pass operands as-is (will be parsed by handler)
         for (const op of instruction.operands) {

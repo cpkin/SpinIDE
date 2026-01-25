@@ -37,6 +37,8 @@ export function createState(
     acc: 0.0,
     pacc: 0.0,
     lr: 0,
+    adcL: 0.0,
+    adcR: 0.0,
     registers: new Float32Array(NUM_REGISTERS),
     delayRam: new Float32Array(MAX_DELAY_RAM),
     delayWritePtr: 0,
@@ -46,6 +48,8 @@ export function createState(
     },
     dacL: 0.0,
     dacR: 0.0,
+    dacLWritten: false,
+    dacRWritten: false,
     ioMode,
     sampleCounter: 0,
     lfo: {
@@ -88,6 +92,8 @@ export function resetState(state: FV1State): void {
   state.acc = 0.0;
   state.pacc = 0.0;
   state.lr = 0;
+  state.adcL = 0.0;
+  state.adcR = 0.0;
   
   // Clear registers
   state.registers.fill(0.0);
@@ -99,6 +105,8 @@ export function resetState(state: FV1State): void {
   // Reset DAC outputs
   state.dacL = 0.0;
   state.dacR = 0.0;
+  state.dacLWritten = false;
+  state.dacRWritten = false;
   
   // Reset sample counter
   state.sampleCounter = 0;

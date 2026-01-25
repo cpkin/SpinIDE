@@ -10,8 +10,28 @@
 import { INSTRUCTIONS_PER_SAMPLE, POT_UPDATE_BLOCK_SIZE } from './constants';
 import { createState, resetState } from './state';
 import { getHandler } from './instructions';
-import { normalizeOutput, normalizeInput } from './io';
+import { normalizeOutput, normalizeInput, mapInputToADC } from './io';
 import type { FV1State, CompiledProgram, PotValues } from './types';
+
+const TWO_PI = Math.PI * 2;
+
+function wrapPhase(phase: number): number {
+  return phase - Math.floor(phase);
+}
+
+function updateLfoState(state: FV1State): void {
+  const lfo = state.lfo;
+
+  lfo.sin0Phase = wrapPhase(lfo.sin0Phase + lfo.sin0Rate);
+  lfo.sin1Phase = wrapPhase(lfo.sin1Phase + lfo.sin1Rate);
+  lfo.rmp0Phase = wrapPhase(lfo.rmp0Phase + lfo.rmp0Rate);
+  lfo.rmp1Phase = wrapPhase(lfo.rmp1Phase + lfo.rmp1Rate);
+
+  lfo.sin0 = Math.sin(lfo.sin0Phase * TWO_PI);
+  lfo.sin1 = Math.sin(lfo.sin1Phase * TWO_PI);
+  lfo.rmp0 = lfo.rmp0Phase;
+  lfo.rmp1 = lfo.rmp1Phase;
+}
 
 /**
  * Options for program execution
@@ -80,16 +100,20 @@ export interface ExecutionResult {
 function executeSample(
   state: FV1State,
   program: CompiledProgram,
-  _inputL: number,
-  _inputR: number
+  inputL: number,
+  inputR: number
 ): void {
   // Update PACC with previous sample's ACC
   state.pacc = state.acc;
-  
+
+  // Clear DAC write flags for this sample
+  state.dacLWritten = false;
+  state.dacRWritten = false;
+
   // Map input samples to ADC registers based on IO mode
-  // TODO: Store ADC values for LDAX ADCL/ADCR access
-  // const adc = mapInputToADC(inputL, inputR, state.ioMode, state.lr);
-  // Will need to add adcl/adcr fields to FV1State for handler access
+  const adc = mapInputToADC(inputL, inputR, state.ioMode, state.lr);
+  state.adcL = adc.adcl;
+  state.adcR = adc.adcr;
   
   // Execute up to 128 instructions
   const instructionCount = Math.min(program.instructions.length, INSTRUCTIONS_PER_SAMPLE);
@@ -106,19 +130,25 @@ function executeSample(
   // DAC outputs are set by WRAX/WRA instructions or default to ACC
   // For stereo processing, LR flag determines which DAC gets the output
   if (state.ioMode === 'mono_mono') {
-    state.dacL = state.acc;
-    state.dacR = state.acc;
-  } else if (state.ioMode === 'mono_stereo') {
-    if (state.lr === 0) {
+    if (!state.dacLWritten) {
       state.dacL = state.acc;
-    } else {
+    }
+    if (!state.dacRWritten) {
+      state.dacR = state.acc;
+    }
+  } else if (state.ioMode === 'mono_stereo') {
+    if (state.lr === 0 && !state.dacLWritten) {
+      state.dacL = state.acc;
+    }
+    if (state.lr === 1 && !state.dacRWritten) {
       state.dacR = state.acc;
     }
   } else {
     // stereo_stereo
-    if (state.lr === 0) {
+    if (state.lr === 0 && !state.dacLWritten) {
       state.dacL = state.acc;
-    } else {
+    }
+    if (state.lr === 1 && !state.dacRWritten) {
       state.dacR = state.acc;
     }
   }
@@ -187,6 +217,9 @@ export function executeProgram(
     // Normalize input if requested
     const inL = normalizeInput(inputL[sample], shouldNormalizeInput);
     const inR = normalizeInput(inputR[sample], shouldNormalizeInput);
+
+    // Advance LFOs once per sample
+    updateLfoState(state);
     
     // Toggle LR flag for stereo processing
     // In stereo modes, program runs twice per sample (once for L, once for R)

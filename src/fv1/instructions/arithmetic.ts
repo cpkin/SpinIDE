@@ -22,6 +22,65 @@
 
 import type { InstructionHandler, FV1State } from '../types';
 import { saturatingAdd, saturatingMul, saturate, clampRDAXCoeff, applyLogShift } from '../fixedPoint';
+import { LFO_SIN_GAIN_SCALE, LFO_RMP_GAIN_SCALE } from '../constants';
+
+const SPECIAL_REGISTERS = {
+  ADCL: 32,
+  ADCR: 33,
+  DACL: 34,
+  DACR: 35,
+  SIN0: 36,
+  SIN1: 37,
+  RMP0: 38,
+  RMP1: 39,
+};
+
+function getRegisterValue(state: FV1State, regIndex: number): number {
+  if (regIndex >= 0 && regIndex < state.registers.length) {
+    return state.registers[regIndex];
+  }
+
+  switch (regIndex) {
+    case SPECIAL_REGISTERS.ADCL:
+      return state.adcL;
+    case SPECIAL_REGISTERS.ADCR:
+      return state.adcR;
+    case SPECIAL_REGISTERS.DACL:
+      return state.dacL;
+    case SPECIAL_REGISTERS.DACR:
+      return state.dacR;
+    case SPECIAL_REGISTERS.SIN0:
+      return state.lfo.sin0 * state.lfo.sin0Amp * LFO_SIN_GAIN_SCALE;
+    case SPECIAL_REGISTERS.SIN1:
+      return state.lfo.sin1 * state.lfo.sin1Amp * LFO_SIN_GAIN_SCALE;
+    case SPECIAL_REGISTERS.RMP0:
+      return state.lfo.rmp0 * state.lfo.rmp0Amp * LFO_RMP_GAIN_SCALE;
+    case SPECIAL_REGISTERS.RMP1:
+      return state.lfo.rmp1 * state.lfo.rmp1Amp * LFO_RMP_GAIN_SCALE;
+    default:
+      return 0.0;
+  }
+}
+
+function setRegisterValue(state: FV1State, regIndex: number, value: number): void {
+  if (regIndex >= 0 && regIndex < state.registers.length) {
+    state.registers[regIndex] = value;
+    return;
+  }
+
+  switch (regIndex) {
+    case SPECIAL_REGISTERS.DACL:
+      state.dacL = value;
+      state.dacLWritten = true;
+      break;
+    case SPECIAL_REGISTERS.DACR:
+      state.dacR = value;
+      state.dacRWritten = true;
+      break;
+    default:
+      break;
+  }
+}
 
 /**
  * RDAX: Read register and multiply, add to ACC
@@ -38,7 +97,7 @@ export const rdax: InstructionHandler = (state: FV1State, operands: number[]) =>
   const regIndex = operands[0];
   const coeff = clampRDAXCoeff(operands[1]);
   
-  const regValue = state.registers[regIndex];
+  const regValue = getRegisterValue(state, regIndex);
   const product = saturatingMul(regValue, coeff);
   state.acc = saturatingAdd(state.acc, product);
 };
@@ -60,7 +119,7 @@ export const rdfx: InstructionHandler = (state: FV1State, operands: number[]) =>
   const regIndex = operands[0];
   const coeff = clampRDAXCoeff(operands[1]);
   
-  const regValue = state.registers[regIndex];
+  const regValue = getRegisterValue(state, regIndex);
   const product = saturatingMul(regValue, coeff);
   state.acc = saturate(product - state.acc);
 };
@@ -77,7 +136,7 @@ export const rdfx: InstructionHandler = (state: FV1State, operands: number[]) =>
  */
 export const ldax: InstructionHandler = (state: FV1State, operands: number[]) => {
   const regIndex = operands[0];
-  state.acc = state.registers[regIndex];
+  state.acc = getRegisterValue(state, regIndex);
 };
 
 /**
@@ -96,7 +155,7 @@ export const wrax: InstructionHandler = (state: FV1State, operands: number[]) =>
   const regIndex = operands[0];
   const coeff = operands.length > 1 ? clampRDAXCoeff(operands[1]) : 0.0;
   
-  state.registers[regIndex] = state.acc;
+  setRegisterValue(state, regIndex, state.acc);
   state.acc = saturatingMul(state.acc, coeff);
 };
 
@@ -118,8 +177,9 @@ export const wrhx: InstructionHandler = (state: FV1State, operands: number[]) =>
   const regIndex = operands[0];
   const coeff = clampRDAXCoeff(operands[1]);
   
-  const diff = saturate(state.acc - state.registers[regIndex]);
-  state.registers[regIndex] = diff;
+  const regValue = getRegisterValue(state, regIndex);
+  const diff = saturate(state.acc - regValue);
+  setRegisterValue(state, regIndex, diff);
   state.acc = saturatingMul(diff, coeff);
 };
 
@@ -141,8 +201,8 @@ export const wrlx: InstructionHandler = (state: FV1State, operands: number[]) =>
   const regIndex = operands[0];
   const coeff = clampRDAXCoeff(operands[1]);
   
-  const oldReg = state.registers[regIndex];
-  state.registers[regIndex] = state.acc;
+  const oldReg = getRegisterValue(state, regIndex);
+  setRegisterValue(state, regIndex, state.acc);
   const diff = saturate(state.acc - oldReg);
   state.acc = saturatingMul(diff, coeff);
 };
@@ -162,7 +222,7 @@ export const maxx: InstructionHandler = (state: FV1State, operands: number[]) =>
   const regIndex = operands[0];
   const coeff = clampRDAXCoeff(operands[1]);
   
-  const regValue = saturatingMul(state.registers[regIndex], coeff);
+  const regValue = saturatingMul(getRegisterValue(state, regIndex), coeff);
   state.acc = Math.max(state.acc, regValue);
 };
 
@@ -189,7 +249,7 @@ export const absa: InstructionHandler = (state: FV1State, _operands: number[]) =
  */
 export const mulx: InstructionHandler = (state: FV1State, operands: number[]) => {
   const regIndex = operands[0];
-  state.acc = saturatingMul(state.acc, state.registers[regIndex]);
+  state.acc = saturatingMul(state.acc, getRegisterValue(state, regIndex));
 };
 
 /**

@@ -58,6 +58,13 @@ export interface FV1State {
    * 1 = right channel processing
    */
   lr: number;
+
+  /**
+   * ADC input registers
+   * Updated per sample based on IO mode
+   */
+  adcL: number;
+  adcR: number;
   
   /**
    * General-purpose registers (REG0-REG31)
@@ -96,6 +103,12 @@ export interface FV1State {
    * DAC output for right channel
    */
   dacR: number;
+
+  /**
+   * Flags indicating DACL/DACR were written this sample
+   */
+  dacLWritten: boolean;
+  dacRWritten: boolean;
   
   /**
    * IO mode configuration
