@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { IOMode, PotValues } from '../fv1/types'
+import type { IOMode, PotValues, CompiledInstruction } from '../fv1/types'
 import type { RenderSimulationResult, RenderProgress } from '../audio/renderTypes'
 import type { CorpusRunResult } from '../fv1/validation/corpusRunner'
 
@@ -29,6 +29,11 @@ interface AudioState {
   // POT values (knobs)
   pots: PotValues
   
+  // Cached render data (for fast re-render on knob changes)
+  cachedInstructions: CompiledInstruction[] | null
+  cachedIOMode: IOMode | null
+  cachedInputBuffer: AudioBuffer | null
+  
   // Corpus validation
   corpusStatus: 'idle' | 'running' | 'complete' | 'error'
   corpusResult: CorpusRunResult | null
@@ -46,6 +51,8 @@ interface AudioState {
   setOutputBuffer: (buffer: AudioBuffer | null) => void
   setRenderResult: (result: RenderSimulationResult | null) => void
   setPots: (pots: Partial<PotValues>) => void
+  setCachedRender: (instructions: CompiledInstruction[], ioMode: IOMode, inputBuffer: AudioBuffer) => void
+  clearCachedRender: () => void
   resetRenderState: () => void
   setCorpusStatus: (status: AudioState['corpusStatus']) => void
   setCorpusResult: (result: CorpusRunResult | null) => void
@@ -71,6 +78,9 @@ export const useAudioStore = create<AudioState>((set) => ({
   outputBuffer: null,
   renderResult: null,
   pots: DEFAULT_POTS,
+  cachedInstructions: null,
+  cachedIOMode: null,
+  cachedInputBuffer: null,
   corpusStatus: 'idle',
   corpusResult: null,
   
@@ -87,6 +97,16 @@ export const useAudioStore = create<AudioState>((set) => ({
   setOutputBuffer: (buffer) => set({ outputBuffer: buffer }),
   setRenderResult: (result) => set({ renderResult: result }),
   setPots: (pots) => set((state) => ({ pots: { ...state.pots, ...pots } })),
+  setCachedRender: (instructions, ioMode, inputBuffer) => set({
+    cachedInstructions: instructions,
+    cachedIOMode: ioMode,
+    cachedInputBuffer: inputBuffer,
+  }),
+  clearCachedRender: () => set({
+    cachedInstructions: null,
+    cachedIOMode: null,
+    cachedInputBuffer: null,
+  }),
   resetRenderState: () => set({
     renderStatus: 'idle',
     renderProgress: null,
