@@ -18,17 +18,17 @@ Building audio interaction workflow with waveform visualization, playback contro
 ## Current Position
 
 Phase: 3 of 5 (Audio Interaction & Export)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-01-25 - Completed 03-04-PLAN.md (Export and URL sharing)
+Last activity: 2026-01-25 - Completed 03-02-PLAN.md (Loop region and scrubbing)
 
 ### Progress
 ```
 Phase 0: [████████████████████] 3/3 plans (100%)
 Phase 1: [████████████████████] 4/4 plans (100%)
 Phase 2: [████████████████████] 11/11 plans (100%)
-Phase 3: [██████████░░░░░░░░░░] 2/4 plans (50%)
-Overall: [████████████████████] 20/22 plans (91%)
+Phase 3: [███████████████░░░░░] 3/4 plans (75%)
+Overall: [████████████████████] 21/22 plans (95%)
 ```
 
 ---
@@ -36,8 +36,8 @@ Overall: [████████████████████] 20/22 pl
 ## Performance Metrics
 
 ### Velocity
-- **Plans completed:** 20
-- **Requirements completed:** 37/50 (74%)
+- **Plans completed:** 21
+- **Requirements completed:** 40/50 (80%)
 - **Phases completed:** 3.0/5 (60%)
 
 ### Quality
@@ -46,7 +46,7 @@ Overall: [████████████████████] 20/22 pl
 - **Test coverage:** Not yet applicable
 
 ### Efficiency
-- **Avg time per plan:** 4 min (80 min / 20 plans)
+- **Avg time per plan:** 4 min (84 min / 21 plans)
 - **Replanning rate:** 0%
 
 ---
@@ -90,6 +90,10 @@ Overall: [████████████████████] 20/22 pl
 | 2026-01-25 | Encode URL state as base64(encodeURIComponent(JSON)) | Cleaner URLs than query params, stays client-side | Supports all Unicode in code, no server logging of shared programs |
 | 2026-01-25 | Convert POT values from 0.0-1.0 to 0-11 for URL | Users understand 0-11 range (FV-1 convention) | URL state human-readable, matches user mental model |
 | 2026-01-25 | Load URL state without auto-render | Auto-rendering could be confusing and waste CPU | User sees loaded message, must click Render to hear audio |
+| 2026-01-25 | Click-to-seek on waveform canvas with pointer cursor | Direct navigation via waveform interaction | Fast playback positioning without separate seek controls |
+| 2026-01-25 | Loop region overlay with draggable handles | Allows independent interaction without canvas redraw on drag | Clean separation: canvas for visualization, overlay for interaction |
+| 2026-01-25 | Enforce 0.1s minimum gap between loop points | Prevents invalid loopStart >= loopEnd regions | 0.1s is minimum audible loop duration (3.2 samples at 32kHz) |
+| 2026-01-25 | Reset loop region to [0, duration] on new render | Prevents old loop region applied to new audio | User must explicitly enable looping for each render |
 
 ### Active Todos
 None
@@ -101,23 +105,25 @@ None
 
 ## Session Continuity
 
-Last session: 2026-01-25T21:37:24Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-01-25T21:52:15Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
 
 ### What Just Happened
-- Completed Plan 03-04: Export and URL sharing
-- Implemented WAV encoder with RIFF/WAVE header and float32→int16 conversion
-- Built URL state encoding with base64 JSON serialization
-- Added export buttons for WAV download and .spn source download
-- Created share button with clipboard API for URL copying
-- Integrated URL state restoration on app mount without auto-rendering
-- Phase 3 now 50% complete (2/4 plans done)
+- Completed Plan 03-02: Loop region and waveform scrubbing
+- Implemented click-to-seek on waveform canvas with pointer cursor
+- Built LoopRegion component with draggable start/end handles
+- Added loop region state management (loopStart, loopEnd, isLooping) to playbackStore
+- Extended playbackManager with setLoopRegion() and setLooping() methods
+- Created loop toggle button with visual state (dim/highlighted blue)
+- Applied Web Audio API loop properties to AudioBufferSourceNode
+- Reset loop region to [0, duration] on new buffer render
+- Phase 3 now 75% complete (3/4 plans done)
 
 ### What's Next
-1. Continue Phase 3: Plans 03-02 (loop region/scrubbing) and 03-03 (analog knobs)
-2. Build loop region selector and waveform scrubbing for playback control
-3. Add POT knobs with fast re-render for parameter tweaking
+1. Continue Phase 3: Plan 03-03 (analog knobs with fast re-render)
+2. Add POT0/1/2 knobs with analog aesthetic and parameter tweaking
+3. Implement fast re-render using cached AST (no re-parsing)
 4. Complete Phase 3 to deliver full audio interaction workflow
 
 ### Context for Next Session
