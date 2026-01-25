@@ -66,6 +66,8 @@ export default function SimulationPanel() {
     setAudioBuffer,
     resetRenderState,
     setSelectedDemo,
+    setCachedRender,
+    clearCachedRender,
   } = useAudioStore()
   
   const { isPlaying, playheadTime, reset: resetPlayback } = usePlaybackStore()
@@ -74,6 +76,7 @@ export default function SimulationPanel() {
   
   const handleFileSelect = async (file: File) => {
     resetRenderState()
+    clearCachedRender()
     setInputError(null)
     
     // Validate file type
@@ -129,6 +132,7 @@ export default function SimulationPanel() {
   const handleDemoChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const demoId = event.target.value
     resetRenderState()
+    clearCachedRender()
     setInputError(null)
     setUploadedFile(null)
 
@@ -184,6 +188,7 @@ export default function SimulationPanel() {
     
     // Reset states
     resetRenderState()
+    clearCachedRender()
     resetPlayback()
     setRenderStatus('rendering')
     
@@ -235,6 +240,10 @@ export default function SimulationPanel() {
       setRenderResult(result)
       setOutputBuffer(result.buffer)
       setRenderError(null)
+      
+      // Cache compiled instructions and input buffer for fast re-render on knob changes
+      setCachedRender(compiled.instructions, ioMode, result.buffer)
+      console.log('Cached instructions for fast re-render')
     } catch (error) {
       setRenderStatus('error')
       const message = error instanceof Error ? error.message : 'Render failed'
@@ -406,6 +415,7 @@ export default function SimulationPanel() {
             playheadTime={playheadTime}
           />
           <PlaybackControls />
+          <KnobPanel />
           <ExportButtons />
         </>
       )}
