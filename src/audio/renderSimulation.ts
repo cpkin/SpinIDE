@@ -4,6 +4,7 @@ import {
   FV1_SAMPLE_RATE,
   INSTRUCTIONS_PER_SAMPLE,
   POT_UPDATE_BLOCK_SIZE,
+  MAX_DELAY_RAM,
 } from '../fv1/constants';
 import { getHandler } from '../fv1/instructions';
 import { createState, resetState, updatePots } from '../fv1/state';
@@ -19,7 +20,6 @@ import {
 const DEFAULT_RENDER_SECONDS = 30;
 const HARD_MAX_RENDER_SECONDS = 120;
 const PROGRESS_THRESHOLD_SECONDS = 10;
-const TARGET_PEAK = Math.pow(10, -1 / 20);
 
 function prepareInputChannels(
   buffer: AudioBuffer,
@@ -76,6 +76,27 @@ function updateLfoState(state: FV1State): void {
   lfo.sin1 = Math.sin(lfo.sin1Phase * TWO_PI);
   lfo.rmp0 = lfo.rmp0Phase;
   lfo.rmp1 = lfo.rmp1Phase;
+}
+
+function computePeakRms(values: Float32Array): { peak: number; rms: number } {
+  let peak = 0;
+  let sumSquares = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    const sample = values[i];
+    const abs = Math.abs(sample);
+    if (abs > peak) peak = abs;
+    sumSquares += sample * sample;
+  }
+  const rms = values.length > 0 ? Math.sqrt(sumSquares / values.length) : 0;
+  return { peak, rms };
+}
+
+function computeNonZeroRatio(values: Float32Array): number {
+  let nonZero = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    if (values[i] !== 0) nonZero += 1;
+  }
+  return values.length > 0 ? nonZero / values.length : 0;
 }
 
 function executeSample(
@@ -158,33 +179,7 @@ function executeSample(
   }
 }
 
-function normalizeOutput(
-  outputL: Float32Array,
-  outputR: Float32Array,
-  outputChannels: number,
-): number {
-  let peak = 0;
-  for (let i = 0; i < outputL.length; i += 1) {
-    peak = Math.max(peak, Math.abs(outputL[i]));
-    if (outputChannels > 1) {
-      peak = Math.max(peak, Math.abs(outputR[i]));
-    }
-  }
-
-  if (peak === 0) {
-    return 0;
-  }
-
-  const gain = TARGET_PEAK / peak;
-  for (let i = 0; i < outputL.length; i += 1) {
-    outputL[i] *= gain;
-    if (outputChannels > 1) {
-      outputR[i] *= gain;
-    }
-  }
-
-  return peak * gain;
-}
+// Output normalization intentionally omitted to preserve POT-controlled dynamics.
 
 function resolveRenderLengthSeconds(
   inputDuration: number,
@@ -253,6 +248,41 @@ export async function renderSimulation(
   };
   const outputChannels = request.ioMode === 'mono_mono' ? 1 : 2;
   const { inputL, inputR } = prepareInputChannels(resampled.buffer, request.ioMode, frameCount);
+  const mixWet = request.mixWet ?? 1;
+  const mixDry = request.mixDry ?? 1 - mixWet;
+  const choDepth = request.choDepth ?? 1;
+
+  if (request.onDebug) {
+    const label = request.debugLabel ?? 'render';
+    const instructionCount = program.instructions.length;
+    const opCounts = program.instructions.reduce<Record<string, number>>((acc, inst) => {
+      acc[inst.opcode] = (acc[inst.opcode] ?? 0) + 1;
+      return acc;
+    }, {});
+    const choCount = opCounts.cho ?? 0;
+    const inputStats = computePeakRms(inputL);
+    request.onDebug({
+      timestamp: Date.now(),
+      label,
+      phase: 'start',
+      data: {
+        ioMode: request.ioMode,
+        pot0: request.pots?.pot0 ?? null,
+        pot1: request.pots?.pot1 ?? null,
+        pot2: request.pots?.pot2 ?? null,
+        mixWet: Number(mixWet.toFixed(3)),
+        mixDry: Number(mixDry.toFixed(3)),
+        choDepth: Number(choDepth.toFixed(3)),
+        instructionCount,
+        choCount,
+        frameCount,
+        inputPeak: Number(inputStats.peak.toFixed(6)),
+        inputRms: Number(inputStats.rms.toFixed(6)),
+        renderSeconds: Number(renderSeconds.toFixed(3)),
+        outputChannels,
+      },
+    });
+  }
 
   // Precompute instruction handlers for performance (fast path)
   const instructionCount = Math.min(program.instructions.length, INSTRUCTIONS_PER_SAMPLE);
@@ -266,7 +296,7 @@ export async function renderSimulation(
     };
   }
 
-  const state = createState(request.ioMode, request.pots ?? {});
+  const state = createState(request.ioMode, request.pots ?? {}, { choDepth });
   resetState(state);
   updatePots(state, request.pots ?? {});
 
@@ -325,29 +355,78 @@ export async function renderSimulation(
     }
 
     state.sampleCounter += 1;
+    state.delayWritePtr = (state.delayWritePtr + 1) % MAX_DELAY_RAM;
   }
 
-  const normalizedPeak = normalizeOutput(outputL, outputR, outputChannels);
+  // Apply fixed 6dB boost to compensate for FV-1 headroom
+  // (Don't normalize to peak - that would undo POT volume changes)
+  const FIXED_GAIN = 2.0; // +6dB boost
+  for (let i = 0; i < outputL.length; i += 1) {
+    outputL[i] *= FIXED_GAIN;
+    if (outputChannels > 1) {
+      outputR[i] *= FIXED_GAIN;
+    }
+  }
 
   if (shouldReportProgress && request.onProgress) {
     request.onProgress({ processedSeconds: totalSeconds, totalSeconds, progress: 1 });
   }
 
-  const offlineContext = new OfflineAudioContext(
+  const outputStatsPreMix = computePeakRms(outputL);
+
+  // Apply wet/dry mix before output buffer creation
+  if (mixWet !== 1 || mixDry !== 0) {
+    for (let i = 0; i < outputL.length; i += 1) {
+      const dryL = inputL[i] ?? 0;
+      outputL[i] = outputL[i] * mixWet + dryL * mixDry;
+      if (outputChannels > 1) {
+        const dryR = inputR[i] ?? dryL;
+        outputR[i] = outputR[i] * mixWet + dryR * mixDry;
+      }
+    }
+  }
+
+  const outputStats = computePeakRms(outputL);
+
+  // Create output buffer directly without OfflineAudioContext processing
+  const outputContext = new OfflineAudioContext(
     outputChannels,
     frameCount,
     FV1_SAMPLE_RATE,
   );
-  const outputBuffer = offlineContext.createBuffer(outputChannels, frameCount, FV1_SAMPLE_RATE);
-  outputBuffer.copyToChannel(outputL, 0);
+  const rendered = outputContext.createBuffer(outputChannels, frameCount, FV1_SAMPLE_RATE);
+  rendered.copyToChannel(outputL, 0);
   if (outputChannels > 1) {
-    outputBuffer.copyToChannel(outputR, 1);
+    rendered.copyToChannel(outputR, 1);
   }
 
-  const source = new AudioBufferSourceNode(offlineContext, { buffer: outputBuffer });
-  source.connect(offlineContext.destination);
-  source.start(0);
-  const rendered = await offlineContext.startRendering();
+  if (request.onDebug) {
+    const label = request.debugLabel ?? 'render';
+    const delayNonZeroRatio = computeNonZeroRatio(state.delayRam);
+    const sin0DelayOffset = state.lfo.sin0 * state.lfo.sin0Amp * state.choDepth;
+    const sin1DelayOffset = state.lfo.sin1 * state.lfo.sin1Amp * state.choDepth;
+    request.onDebug({
+      timestamp: Date.now(),
+      label,
+      phase: 'end',
+      data: {
+        outputPeak: Number(outputStats.peak.toFixed(6)),
+        outputRms: Number(outputStats.rms.toFixed(6)),
+        outputPeakPreMix: Number(outputStatsPreMix.peak.toFixed(6)),
+        outputRmsPreMix: Number(outputStatsPreMix.rms.toFixed(6)),
+        delayNonZeroRatio: Number(delayNonZeroRatio.toFixed(6)),
+        delayWritePtr: state.delayWritePtr,
+        sin0DelayOffset: Number(sin0DelayOffset.toFixed(3)),
+        sin1DelayOffset: Number(sin1DelayOffset.toFixed(3)),
+        sin0Rate: Number(state.lfo.sin0Rate.toFixed(6)),
+        sin1Rate: Number(state.lfo.sin1Rate.toFixed(6)),
+        sin0Amp: Number(state.lfo.sin0Amp.toFixed(6)),
+        sin1Amp: Number(state.lfo.sin1Amp.toFixed(6)),
+        sin0: Number(state.lfo.sin0.toFixed(6)),
+        sin1: Number(state.lfo.sin1.toFixed(6)),
+      },
+    });
+  }
 
   const renderEndTime = performance.now();
   const elapsedMs = renderEndTime - renderStartTime;
@@ -367,7 +446,8 @@ export async function renderSimulation(
     sampleRate: rendered.sampleRate,
     warnings,
     resampleNote: resampled.note,
-    normalizedPeak,
+    normalizedPeak: outputStats.peak,
     elapsedMs,
+    resampledInput: resampled.buffer,
   };
 }

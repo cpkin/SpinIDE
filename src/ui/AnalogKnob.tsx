@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 
 interface AnalogKnobProps {
-  value: number        // 0-11 range
+  value: number        // 0-10 range
   onChange: (value: number) => void
   label: string
   disabled?: boolean
@@ -15,8 +15,8 @@ export default function AnalogKnob({ value, onChange, label, disabled = false }:
   const [dragStartValue, setDragStartValue] = useState(0)
   const knobRef = useRef<HTMLDivElement>(null)
   
-  // Convert 0-11 value to rotation angle: -135° to +135° (270° total range)
-  const rotation = (value / 11) * 270 - 135
+  // Convert 0-10 value to rotation angle: -135° to +135° (270° total range)
+  const rotation = (value / 10) * 270 - 135
   
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disabled || isEditing) return
@@ -49,7 +49,7 @@ export default function AnalogKnob({ value, onChange, label, disabled = false }:
       const normalizedAngle = ((angle + 90 + 360) % 360)
       
       // Map angle to value (270° range centered at top)
-      // -135° (bottom-left) to +135° (bottom-right) maps to 0-11
+      // -135° (bottom-left) to +135° (bottom-right) maps to 0-10
       let mappedAngle = normalizedAngle
       if (mappedAngle > 225) {
         // Wrap around the bottom dead zone
@@ -58,13 +58,13 @@ export default function AnalogKnob({ value, onChange, label, disabled = false }:
       
       // Convert to 0-1 range where -135° = 0, +135° = 1
       const ratio = (mappedAngle + 135) / 270
-      newValue = Math.max(0, Math.min(11, ratio * 11))
+      newValue = Math.max(0, Math.min(10, ratio * 10))
     } else {
       // Vertical drag mode (linear adjustment)
       const delta = dragStartY - e.clientY // up = positive (increase)
       const sensitivity = 0.02
       newValue = dragStartValue + (delta * sensitivity)
-      newValue = Math.max(0, Math.min(11, newValue))
+      newValue = Math.max(0, Math.min(10, newValue))
     }
     
     onChange(newValue)
@@ -98,7 +98,7 @@ export default function AnalogKnob({ value, onChange, label, disabled = false }:
   const handleEditSubmit = () => {
     const parsed = parseFloat(editValue)
     if (!isNaN(parsed)) {
-      const clamped = Math.max(0, Math.min(11, parsed))
+      const clamped = Math.max(0, Math.min(10, parsed))
       onChange(clamped)
     }
     setIsEditing(false)

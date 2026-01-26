@@ -32,9 +32,20 @@ class PlaybackManager {
    * Set the audio buffer to play
    */
   setBuffer(buffer: AudioBuffer) {
+    const wasPlaying = this.source !== null;
+    // Stop current playback if any
+    if (wasPlaying) {
+      this.stop();
+    }
+    
     this.buffer = buffer
     this.pausedAt = 0
     this.loopEnd = buffer.duration
+    
+    // Restart playback with new buffer if was playing
+    if (wasPlaying) {
+      this.play();
+    }
   }
 
   /**

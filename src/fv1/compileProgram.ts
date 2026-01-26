@@ -15,7 +15,7 @@
 
 import type { ParseResult, ParsedInstruction } from '../parser/ast';
 import type { CompiledProgram, CompiledInstruction, IOMode } from './types';
-import { INSTRUCTIONS_PER_SAMPLE } from './constants';
+import { INSTRUCTIONS_PER_SAMPLE, MAX_DELAY_RAM } from './constants';
 
 /**
  * Compilation error
@@ -223,8 +223,8 @@ function parseChoOperands(
   if (instruction.operands.length >= operandOffset + 3) {
     if (mode === 1) {
       operands.push(parseCoefficient(instruction.operands[operandOffset + 2]));
-    } else if (mode !== 2) {
-      operands.push(parseAddress(instruction.operands[operandOffset + 2], memoryAddresses));
+    } else {
+      operands.push(parseDelayWriteAddress(instruction.operands[operandOffset + 2], memoryAddresses));
     }
   }
 
@@ -307,7 +307,7 @@ function parseAddress(operand: string, symbols: Record<string, number>): number 
     if (!(label in symbols)) {
       throw new Error(`Unresolved label: ${label}`);
     }
-    return symbols[label];
+    return symbols[label] + MAX_DELAY_RAM;
   }
   
   // Expression with # separator: label#+offset (e.g., "delay#+100")
@@ -322,7 +322,8 @@ function parseAddress(operand: string, symbols: Record<string, number>): number 
     }
     
     const base = symbols[label];
-    return op === '+' ? base + offset : base - offset;
+    const absolute = op === '+' ? base + offset : base - offset;
+    return absolute + MAX_DELAY_RAM;
   }
   
   // Expression without # separator: label+offset (e.g., "delay+100")
@@ -348,6 +349,35 @@ function parseAddress(operand: string, symbols: Record<string, number>): number 
   }
   
   throw new Error(`Invalid address: ${operand}`);
+}
+
+function parseDelayWriteAddress(operand: string, symbols: Record<string, number>): number {
+  const trimmed = operand.trim();
+
+  // Preserve explicit pointer-relative addressing
+  if (trimmed.includes('#')) {
+    return parseAddress(trimmed, symbols);
+  }
+
+  // Treat delay memory symbols as pointer-relative by default for writes
+  const exprMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)([+\-])(\d+)$/);
+  if (exprMatch) {
+    const label = exprMatch[1].toLowerCase();
+    const op = exprMatch[2];
+    const offset = parseInt(exprMatch[3], 10);
+    if (label in symbols) {
+      const base = symbols[label];
+      const absolute = op === '+' ? base + offset : base - offset;
+      return absolute + MAX_DELAY_RAM;
+    }
+  }
+
+  const bareSymbol = trimmed.toLowerCase();
+  if (bareSymbol in symbols) {
+    return symbols[bareSymbol] + MAX_DELAY_RAM;
+  }
+
+  return parseAddress(trimmed, symbols);
 }
 
 /**
@@ -433,7 +463,7 @@ function compileInstruction(
       case 'wra':
       case 'wrap':
         if (instruction.operands.length >= 1) {
-          operands.push(parseAddress(instruction.operands[0], memoryAddresses));
+          operands.push(parseDelayWriteAddress(instruction.operands[0], memoryAddresses));
         }
         if (instruction.operands.length >= 2) {
           operands.push(parseCoefficient(instruction.operands[1]));

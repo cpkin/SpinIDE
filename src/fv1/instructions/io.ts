@@ -247,8 +247,15 @@ function getLfoParams(state: FV1State, lfoSelect: number): {
   };
 }
 
+function resolveDelayAddress(state: FV1State, address: number): number {
+  const pointerRelative = address >= MAX_DELAY_RAM;
+  const base = pointerRelative ? address - MAX_DELAY_RAM : address;
+  const resolved = pointerRelative ? base + state.delayWritePtr : base;
+  return ((resolved % MAX_DELAY_RAM) + MAX_DELAY_RAM) % MAX_DELAY_RAM;
+}
+
 function readDelayInterpolated(state: FV1State, address: number): number {
-  const wrapped = ((address % MAX_DELAY_RAM) + MAX_DELAY_RAM) % MAX_DELAY_RAM;
+  const wrapped = resolveDelayAddress(state, address);
   const index = Math.floor(wrapped);
   const next = (index + 1) % MAX_DELAY_RAM;
   const fraction = wrapped - index;
@@ -377,9 +384,11 @@ export const cho: InstructionHandler = (_state: FV1State, _operands: number[]) =
   }
 
   const baseAddress = _operands.length > 3 ? _operands[3] : 0;
-  const delayOffset = lfoParams.normalized * lfoParams.amplitude * lfoParams.delayScale;
+  const delayOffset = lfoParams.normalized * lfoParams.amplitude * lfoParams.delayScale * state.choDepth;
   const delayValue = readDelayInterpolated(state, baseAddress + delayOffset);
-  const coeff = (flags & CHO_FLAG_COMPC) === 0 ? lfoParams.blend : 1 - lfoParams.blend;
+  const blend = Math.max(0, Math.min(1, lfoParams.blend));
+  const smoothBlend = blend * blend * (3 - 2 * blend);
+  const coeff = (flags & CHO_FLAG_COMPC) === 0 ? smoothBlend : 1 - smoothBlend;
   const scaled = saturatingMul(delayValue, coeff);
 
   if (mode === CHO_MODE_RDAL) {

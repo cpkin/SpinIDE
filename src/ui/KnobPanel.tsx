@@ -2,10 +2,13 @@ import { useEffect, useRef } from 'react'
 import { useAudioStore } from '../store/audioStore'
 import { renderSimulation } from '../audio/renderSimulation'
 import AnalogKnob from './AnalogKnob'
+import { useDebugStore } from '../store/debugStore'
 
 export default function KnobPanel() {
   const {
     pots,
+    wetMix,
+    choDepth,
     renderStatus,
     cachedInstructions,
     cachedIOMode,
@@ -15,42 +18,52 @@ export default function KnobPanel() {
     setRenderProgress,
     setRenderError,
     setRenderResult,
+    setOutputBuffer,
   } = useAudioStore()
-  
+
+  const { enabled: debugEnabled, addEntry: addDebugEntry } = useDebugStore()
+
   const debounceTimerRef = useRef<number | null>(null)
   const previousPotsRef = useRef(pots)
+  const previousWetMixRef = useRef(wetMix)
+  const previousChoDepthRef = useRef(choDepth)
   
-  // Convert 0.0-1.0 internal range to 0-11 display range
-  const displayPot0 = pots.pot0 * 11
-  const displayPot1 = pots.pot1 * 11
-  const displayPot2 = pots.pot2 * 11
+  // Convert 0.0-1.0 internal range to 0-10 display range
+  const displayPot0 = pots.pot0 * 10
+  const displayPot1 = pots.pot1 * 10
+  const displayPot2 = pots.pot2 * 10
   
   const isDisabled = renderStatus === 'rendering'
   
   const handlePot0Change = (value: number) => {
-    setPots({ pot0: value / 11 })
+    setPots({ pot0: value / 10 })
   }
   
   const handlePot1Change = (value: number) => {
-    setPots({ pot1: value / 11 })
+    setPots({ pot1: value / 10 })
   }
   
   const handlePot2Change = (value: number) => {
-    setPots({ pot2: value / 11 })
+    setPots({ pot2: value / 10 })
   }
   
   // Debounced re-render on knob change
   useEffect(() => {
-    // Check if pots actually changed
-    if (
-      pots.pot0 === previousPotsRef.current.pot0 &&
-      pots.pot1 === previousPotsRef.current.pot1 &&
-      pots.pot2 === previousPotsRef.current.pot2
-    ) {
+    const potsChanged =
+      pots.pot0 !== previousPotsRef.current.pot0 ||
+      pots.pot1 !== previousPotsRef.current.pot1 ||
+      pots.pot2 !== previousPotsRef.current.pot2
+    const wetMixChanged = wetMix !== previousWetMixRef.current
+    const choDepthChanged = choDepth !== previousChoDepthRef.current
+
+    // Check if pots or wet mix actually changed
+    if (!potsChanged && !wetMixChanged && !choDepthChanged) {
       return
     }
     
     previousPotsRef.current = pots
+    previousWetMixRef.current = wetMix
+    previousChoDepthRef.current = choDepth
     
     // Clear any existing debounce timer
     if (debounceTimerRef.current !== null) {
@@ -72,16 +85,13 @@ export default function KnobPanel() {
         window.clearTimeout(debounceTimerRef.current)
       }
     }
-  }, [pots, cachedInstructions, cachedIOMode, cachedInputBuffer, renderStatus])
+  }, [pots, wetMix, choDepth, cachedInstructions, cachedIOMode, cachedInputBuffer, renderStatus])
   
   const triggerReRender = async () => {
     if (!cachedInstructions || !cachedIOMode || !cachedInputBuffer) {
       console.warn('Cannot re-render: cache missing')
       return
     }
-    
-    console.log('Re-rendering with cached instructions...')
-    const reRenderStartTime = performance.now()
     
     setRenderStatus('rendering')
     setRenderError(null)
@@ -95,14 +105,16 @@ export default function KnobPanel() {
         onProgress: (progress) => {
           setRenderProgress(progress)
         },
+        onDebug: debugEnabled ? (entry) => addDebugEntry(entry) : undefined,
+        debugLabel: 'rerender',
+        mixWet: wetMix,
+        mixDry: 1 - wetMix,
+        choDepth,
       })
-      
-      const reRenderEndTime = performance.now()
-      const elapsedMs = reRenderEndTime - reRenderStartTime
-      console.log(`Re-render using cached instructions: ${elapsedMs.toFixed(0)}ms`)
       
       setRenderStatus('complete')
       setRenderResult(result)
+      setOutputBuffer(result.buffer)
       setRenderError(null)
     } catch (error) {
       setRenderStatus('error')

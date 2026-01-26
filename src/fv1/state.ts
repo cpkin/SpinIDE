@@ -31,7 +31,8 @@ const DEFAULT_POTS: PotValues = {
  */
 export function createState(
   ioMode: IOMode = 'stereo_stereo',
-  pots: Partial<PotValues> = {}
+  pots: Partial<PotValues> = {},
+  options: { choDepth?: number } = {}
 ): FV1State {
   return {
     acc: 0.0,
@@ -51,6 +52,7 @@ export function createState(
     dacLWritten: false,
     dacRWritten: false,
     ioMode,
+    choDepth: options.choDepth ?? 1,
     sampleCounter: 0,
     lfo: {
       sin0: 0.0,

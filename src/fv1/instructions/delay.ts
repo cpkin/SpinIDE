@@ -17,8 +17,15 @@ import type { InstructionHandler, FV1State } from '../types';
 import { saturatingAdd, saturatingMul, clampRDACoeff } from '../fixedPoint';
 import { MAX_DELAY_RAM, LFO_SIN_DELAY_SCALE, LFO_RMP_DELAY_SCALE } from '../constants';
 
+function resolveDelayAddress(state: FV1State, address: number): number {
+  const pointerRelative = address >= MAX_DELAY_RAM;
+  const base = pointerRelative ? address - MAX_DELAY_RAM : address;
+  const resolved = pointerRelative ? base + state.delayWritePtr : base;
+  return ((resolved % MAX_DELAY_RAM) + MAX_DELAY_RAM) % MAX_DELAY_RAM;
+}
+
 function readDelayInterpolated(state: FV1State, address: number): number {
-  const wrapped = ((address % MAX_DELAY_RAM) + MAX_DELAY_RAM) % MAX_DELAY_RAM;
+  const wrapped = resolveDelayAddress(state, address);
   const index = Math.floor(wrapped);
   const next = (index + 1) % MAX_DELAY_RAM;
   const fraction = wrapped - index;
@@ -39,10 +46,10 @@ function readDelayInterpolated(state: FV1State, address: number): number {
  * Reference: http://www.spinsemi.com/knowledge_base/inst_syntax.html#RDA
  */
 export const rda: InstructionHandler = (state: FV1State, operands: number[]) => {
-  const address = Math.trunc(operands[0]) % MAX_DELAY_RAM;
+  const address = Math.trunc(operands[0]);
   const coeff = clampRDACoeff(operands[1]);
-  
-  const delayValue = state.delayRam[address];
+  const resolved = resolveDelayAddress(state, address);
+  const delayValue = state.delayRam[resolved];
   const product = saturatingMul(delayValue, coeff);
   state.acc = saturatingAdd(state.acc, product);
 };
@@ -90,10 +97,10 @@ export const rmpa: InstructionHandler = (state: FV1State, operands: number[]) =>
  * Reference: http://www.spinsemi.com/knowledge_base/inst_syntax.html#WRA
  */
 export const wra: InstructionHandler = (state: FV1State, operands: number[]) => {
-  const address = Math.trunc(operands[0]) % MAX_DELAY_RAM;
+  const address = Math.trunc(operands[0]);
   const coeff = operands.length > 1 ? operands[1] : 0.0;
-  
-  state.delayRam[address] = state.acc;
+  const resolved = resolveDelayAddress(state, address);
+  state.delayRam[resolved] = state.acc;
   state.acc = saturatingMul(state.acc, coeff);
 };
 
@@ -112,11 +119,12 @@ export const wra: InstructionHandler = (state: FV1State, operands: number[]) => 
  * Reference: http://www.spinsemi.com/knowledge_base/inst_syntax.html#WRAP
  */
 export const wrap: InstructionHandler = (state: FV1State, operands: number[]) => {
-  const address = Math.trunc(operands[0]) % MAX_DELAY_RAM;
+  const address = Math.trunc(operands[0]);
   const coeff = clampRDACoeff(operands[1]);
   
   // Read from specified address
-  const delayValue = state.delayRam[address];
+  const resolved = resolveDelayAddress(state, address);
+  const delayValue = state.delayRam[resolved];
   
   // Write (ACC * coeff + delayValue) to current write pointer
   const product = saturatingMul(state.acc, coeff);

@@ -13,12 +13,14 @@ import WaveformDisplay from './WaveformDisplay'
 import PlaybackControls from './PlaybackControls'
 import ExportButtons from './ExportButtons'
 import KnobPanel from './KnobPanel'
+import DebugPanel from './DebugPanel'
 import SignalPathDiagram from '../components/SignalPathDiagram'
 import { extractMetadata } from '../utils/metadataParser'
 import { buildCytoscapeElements } from '../utils/graphBuilder'
 import { demoAudioFiles } from '../demos'
 import type { IOMode } from '../fv1/types'
 import type { SimulationWarning } from '../fv1/warnings'
+import { useDebugStore } from '../store/debugStore'
 
 const SUPPORTED_AUDIO_TYPES = ['audio/wav', 'audio/mpeg', 'audio/mp4', 'audio/x-m4a']
 const SUPPORTED_EXTENSIONS = ['.wav', '.mp3', '.m4a']
@@ -59,6 +61,8 @@ export default function SimulationPanel() {
     outputBuffer,
     pots,
     selectedDemo,
+    wetMix,
+    choDepth,
     setUploadedFile,
     setInputError,
     setIoMode,
@@ -72,9 +76,19 @@ export default function SimulationPanel() {
     setSelectedDemo,
     setCachedRender,
     clearCachedRender,
+    setWetMix,
+    setChoDepth,
   } = useAudioStore()
   
   const { isPlaying, playheadTime, reset: resetPlayback } = usePlaybackStore()
+
+  const {
+    enabled: debugEnabled,
+    entries: debugEntries,
+    setEnabled: setDebugEnabled,
+    addEntry: addDebugEntry,
+    clear: clearDebugEntries,
+  } = useDebugStore()
   
   const source = useValidationStore((state) => state.source)
   
@@ -251,6 +265,11 @@ export default function SimulationPanel() {
         onProgress: (progress) => {
           setRenderProgress(progress)
         },
+        onDebug: debugEnabled ? (entry) => addDebugEntry(entry) : undefined,
+        debugLabel: 'render',
+        mixWet: wetMix,
+        mixDry: 1 - wetMix,
+        choDepth,
       })
       
       // Update render state and set output buffer for waveform/playback
@@ -259,9 +278,8 @@ export default function SimulationPanel() {
       setOutputBuffer(result.buffer)
       setRenderError(null)
       
-      // Cache compiled instructions and input buffer for fast re-render on knob changes
-      setCachedRender(compiled.instructions, ioMode, result.buffer)
-      console.log('Cached instructions for fast re-render')
+      // Cache compiled instructions and resampled input buffer for fast re-render on knob changes
+      setCachedRender(compiled.instructions, ioMode, result.resampledInput)
     } catch (error) {
       setRenderStatus('error')
       const message = error instanceof Error ? error.message : 'Render failed'
@@ -434,6 +452,42 @@ export default function SimulationPanel() {
           />
           <PlaybackControls />
           <KnobPanel />
+          <div className="mix-row">
+            <label className="control-label" htmlFor="mix-slider">Wet Mix</label>
+            <div className="mix-controls">
+              <input
+                id="mix-slider"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={wetMix}
+                onChange={(e) => setWetMix(parseFloat(e.target.value))}
+              />
+              <span className="mix-value">{Math.round(wetMix * 100)}%</span>
+            </div>
+          </div>
+          <div className="mix-row">
+            <label className="control-label" htmlFor="cho-depth-slider">CHO Depth</label>
+            <div className="mix-controls">
+              <input
+                id="cho-depth-slider"
+                type="range"
+                min={0.1}
+                max={4}
+                step={0.1}
+                value={choDepth}
+                onChange={(e) => setChoDepth(parseFloat(e.target.value))}
+              />
+              <span className="mix-value">{choDepth.toFixed(1)}x</span>
+            </div>
+          </div>
+          <DebugPanel
+            enabled={debugEnabled}
+            entries={debugEntries}
+            onToggle={setDebugEnabled}
+            onClear={clearDebugEntries}
+          />
           
           {/* Signal Path Diagram - only show if metadata.graph exists */}
           {metadata?.graph && (

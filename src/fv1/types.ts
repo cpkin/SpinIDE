@@ -114,6 +114,11 @@ export interface FV1State {
    * IO mode configuration
    */
   ioMode: IOMode;
+
+  /**
+   * CHO delay depth multiplier (debug/quality tuning)
+   */
+  choDepth: number;
   
   /**
    * Current sample counter (for POT update timing)

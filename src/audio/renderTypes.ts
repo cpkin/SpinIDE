@@ -13,6 +13,13 @@ export interface RenderProgress {
   progress: number;
 }
 
+export interface RenderDebugEntry {
+  timestamp: number;
+  label: string;
+  phase: 'start' | 'end';
+  data: Record<string, number | string | boolean | null>;
+}
+
 export interface RenderSimulationRequest {
   input: File | ArrayBuffer | AudioBuffer;
   instructions: CompiledInstruction[];
@@ -21,6 +28,11 @@ export interface RenderSimulationRequest {
   renderSeconds?: number;
   abortSignal?: AbortSignal;
   onProgress?: (progress: RenderProgress) => void;
+  onDebug?: (entry: RenderDebugEntry) => void;
+  debugLabel?: string;
+  mixWet?: number;
+  mixDry?: number;
+  choDepth?: number;
 }
 
 export interface RenderSimulationResult {
@@ -31,6 +43,7 @@ export interface RenderSimulationResult {
   resampleNote: string;
   normalizedPeak: number;
   elapsedMs: number;
+  resampledInput: AudioBuffer;
 }
 
 export class RenderCancelledError extends Error {
