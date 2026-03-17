@@ -264,16 +264,27 @@ function parseChoOperands(
  * @param operand - Coefficient string
  * @returns Numeric coefficient value
  */
-function parseCoefficient(operand: string): number {
-  const trimmed = operand.trim();
-  
+function parseCoefficient(
+  operand: string,
+  equates?: Record<string, { value: string }>,
+): number {
+  let trimmed = operand.trim();
+
+  // Resolve equates (e.g., "crush" → "0xfc0000")
+  if (equates) {
+    const lower = trimmed.toLowerCase();
+    if (lower in equates) {
+      trimmed = equates[lower].value.trim();
+    }
+  }
+
   // POT references (will be resolved at runtime)
   if (trimmed.toLowerCase().startsWith('pot')) {
     // POT values are placeholders - compiler can't resolve them
     // Return 0 as placeholder (runtime will use actual POT values)
     return 0;
   }
-  
+
   // Hexadecimal: $FF or 0xFF
   if (trimmed.startsWith('$')) {
     return parseInt(trimmed.slice(1), 16);
@@ -281,18 +292,18 @@ function parseCoefficient(operand: string): number {
   if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) {
     return parseInt(trimmed.slice(2), 16);
   }
-  
+
   // Binary: %10101010
   if (trimmed.startsWith('%')) {
     return parseInt(trimmed.slice(1), 2);
   }
-  
+
   // Decimal (default)
   const value = parseFloat(trimmed);
   if (isNaN(value)) {
     throw new Error(`Invalid coefficient: ${operand}`);
   }
-  
+
   return value;
 }
 
@@ -455,7 +466,7 @@ function compileInstruction(
           operands.push(parseRegister(instruction.operands[0], equates));
         }
         if (instruction.operands.length >= 2) {
-          operands.push(parseCoefficient(instruction.operands[1]));
+          operands.push(parseCoefficient(instruction.operands[1], equates));
         }
         break;
       
@@ -473,7 +484,7 @@ function compileInstruction(
           operands.push(parseAddress(instruction.operands[0], memoryAddresses));
         }
         if (instruction.operands.length >= 2) {
-          operands.push(parseCoefficient(instruction.operands[1]));
+          operands.push(parseCoefficient(instruction.operands[1], equates));
         }
         break;
       
@@ -484,14 +495,14 @@ function compileInstruction(
           operands.push(parseDelayWriteAddress(instruction.operands[0], memoryAddresses));
         }
         if (instruction.operands.length >= 2) {
-          operands.push(parseCoefficient(instruction.operands[1]));
+          operands.push(parseCoefficient(instruction.operands[1], equates));
         }
         break;
       
       // RMPA: coeff
       case 'rmpa':
         if (instruction.operands.length >= 1) {
-          operands.push(parseCoefficient(instruction.operands[0]));
+          operands.push(parseCoefficient(instruction.operands[0], equates));
         }
         break;
       
@@ -500,10 +511,10 @@ function compileInstruction(
       case 'log':
       case 'exp':
         if (instruction.operands.length >= 1) {
-          operands.push(parseCoefficient(instruction.operands[0]));
+          operands.push(parseCoefficient(instruction.operands[0], equates));
         }
         if (instruction.operands.length >= 2) {
-          operands.push(parseCoefficient(instruction.operands[1]));
+          operands.push(parseCoefficient(instruction.operands[1], equates));
         }
         break;
       
@@ -512,7 +523,7 @@ function compileInstruction(
       case 'or':
       case 'xor':
         if (instruction.operands.length >= 1) {
-          operands.push(parseCoefficient(instruction.operands[0]));
+          operands.push(parseCoefficient(instruction.operands[0], equates));
         }
         break;
       
@@ -558,10 +569,10 @@ function compileInstruction(
           operands.push(parseLfoSelector(instruction.operands[0], type));
         }
         if (instruction.operands.length >= 2) {
-          operands.push(parseCoefficient(instruction.operands[1]));
+          operands.push(parseCoefficient(instruction.operands[1], equates));
         }
         if (instruction.operands.length >= 3) {
-          operands.push(parseCoefficient(instruction.operands[2]));
+          operands.push(parseCoefficient(instruction.operands[2], equates));
         }
         break;
       
@@ -599,7 +610,7 @@ function compileInstruction(
         // Unknown opcode - pass operands as-is
         for (const op of instruction.operands) {
           try {
-            operands.push(parseCoefficient(op));
+            operands.push(parseCoefficient(op, equates));
           } catch {
             // If parsing fails, use 0 as placeholder
             operands.push(0);

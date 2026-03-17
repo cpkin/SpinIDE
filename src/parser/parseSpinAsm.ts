@@ -107,6 +107,34 @@ export const parseSpinAsm = (source: string): ParseResult => {
       return
     }
 
+    // Handle "name equ value" and "name mem size" syntax (name-first form)
+    const afterKeywordLower = afterKeyword.toLowerCase()
+    const nameFirstMatch = afterKeywordLower.match(/^(equ|mem)\b/)
+    if (nameFirstMatch) {
+      const directive = nameFirstMatch[1]
+      const name = keyword
+      const expression = afterKeyword.slice(nameFirstMatch[0].length).trim()
+      const column = content.indexOf(name) + 1
+      if (directive === 'equ') {
+        symbols.equates[name.toLowerCase()] = {
+          name,
+          value: expression,
+          line: lineNumber,
+          column,
+        }
+      } else {
+        const allocation = {
+          name,
+          size: expression,
+          line: lineNumber,
+          column,
+        }
+        symbols.memory[name.toLowerCase()] = allocation
+        memoryAllocations.push(allocation)
+      }
+      return
+    }
+
     const operands = afterKeyword
       ? afterKeyword.split(',').map((operand) => operand.trim()).filter(Boolean)
       : []

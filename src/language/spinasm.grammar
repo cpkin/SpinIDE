@@ -11,8 +11,8 @@ LabeledStatement { LabelDef (DirectiveStmt | InstructionStmt) }
 LabelDef { Identifier ":" }
 
 DirectiveStmt { EquStmt | MemStmt | OrgStmt }
-EquStmt { EquDir Identifier Expression }
-MemStmt { MemDir Identifier Expression }
+EquStmt { EquDir Identifier Expression | Identifier EquDir Expression }
+MemStmt { MemDir Identifier Expression | Identifier MemDir Expression }
 OrgStmt { OrgDir Expression }
 InstructionStmt { OpcodeName OperandList? }
 
