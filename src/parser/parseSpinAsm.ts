@@ -135,9 +135,15 @@ export const parseSpinAsm = (source: string): ParseResult => {
       return
     }
 
-    const operands = afterKeyword
-      ? afterKeyword.split(',').map((operand) => operand.trim()).filter(Boolean)
+    // Split on commas and trim each part, but preserve interior empty strings
+    // (e.g., "cho rda,RMP0,,delay0+1" has an empty flags field that must stay in position).
+    // Only trailing empty strings are dropped.
+    const rawParts = afterKeyword
+      ? afterKeyword.split(',').map((operand) => operand.trim())
       : []
+    let lastNonEmpty = rawParts.length - 1
+    while (lastNonEmpty >= 0 && rawParts[lastNonEmpty] === '') lastNonEmpty--
+    const operands = lastNonEmpty >= 0 ? rawParts.slice(0, lastNonEmpty + 1) : []
 
     const instruction: ParsedInstruction = {
       opcode: normalizedKeyword,

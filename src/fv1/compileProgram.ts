@@ -189,6 +189,7 @@ function parseChoFlags(operand: string): number {
 
   return normalized.split('|').reduce((flags, flag) => {
     const cleaned = flag.trim();
+    if (cleaned === 'sin') return flags | 0x00; // SIN is default (no bit set)
     if (cleaned === 'cos') return flags | 0x01;
     if (cleaned === 'reg') return flags | 0x02;
     if (cleaned === 'compc') return flags | 0x04;
@@ -253,7 +254,7 @@ function parseRawWord(operand: string): number {
   } else if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) {
     value = parseInt(trimmed.slice(2), 16);
   } else if (trimmed.startsWith('%')) {
-    value = parseInt(trimmed.slice(1), 2);
+    value = parseInt(trimmed.slice(1).replace(/_/g, ''), 2);
   } else if (/^\d+$/.test(trimmed)) {
     value = parseInt(trimmed, 10);
   } else {
@@ -302,7 +303,7 @@ function parseChoOperands(
     if (mode === 1) {
       operands.push(parseCoefficient(instruction.operands[operandOffset + 2], equates, memoryAddresses));
     } else {
-      operands.push(parseDelayWriteAddress(instruction.operands[operandOffset + 2], memoryAddresses));
+      operands.push(parseDelayWriteAddress(instruction.operands[operandOffset + 2], memoryAddresses, equates));
     }
   }
 
@@ -363,8 +364,8 @@ function parseAtomicValue(token: string, ctx: ExprContext): number {
   if (trimmed.startsWith('$')) return parseInt(trimmed.slice(1), 16);
   if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) return parseInt(trimmed.slice(2), 16);
 
-  // Binary: %10101010
-  if (trimmed.startsWith('%')) return parseInt(trimmed.slice(1), 2);
+  // Binary: %10101010 (underscores allowed as visual separators)
+  if (trimmed.startsWith('%')) return parseInt(trimmed.slice(1).replace(/_/g, ''), 2);
 
   // Decimal
   const value = parseFloat(trimmed);
@@ -416,8 +417,11 @@ function evaluateExpression(
     // Atom: read until next operator or end
     // An atom can start with '-' (unary), '$', '0x', '%', digit, or letter
     let atomStart = pos;
-    // Handle unary minus
-    if (ch === '-' || ch === '+') pos++;
+    // Handle unary minus — skip any whitespace between sign and value (e.g., "- 1/256")
+    if (ch === '-' || ch === '+') {
+      pos++;
+      while (pos < s.length && (s[pos] === ' ' || s[pos] === '\t')) pos++;
+    }
     // Read the rest of the atom (identifier, hex literal, number)
     while (pos < s.length && s[pos] !== '+' && s[pos] !== '*' && s[pos] !== '/' && s[pos] !== ' ' && s[pos] !== '\t') {
       // A '-' is part of the atom only if it's the first char (unary)
@@ -493,73 +497,73 @@ function parseCoefficient(
  * @param symbols - Symbol table for label resolution
  * @returns Numeric address (0-32767)
  */
-function parseAddress(operand: string, symbols: Record<string, number>): number {
+function parseAddress(
+  operand: string,
+  symbols: Record<string, number>,
+  equates?: Record<string, { value: string }>,
+): number {
   const trimmed = operand.trim();
-  
+
   // Direct numeric
   const numMatch = trimmed.match(/^(\d+)$/);
   if (numMatch) {
     return parseInt(numMatch[1], 10);
   }
-  
-  // Label reference with # or ^ suffix (e.g., "delay#", "delay^")
-  // Both mean end-of-buffer address (^ is an alternate syntax used by some assemblers)
-  const labelMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)[#^]$/);
-  if (labelMatch) {
-    const label = labelMatch[1].toLowerCase();
-    if (!(label in symbols)) {
-      throw new Error(`Unresolved label: ${label}`);
-    }
-    return symbols[label] + MAX_DELAY_RAM;
-  }
 
-  // Expression with # or ^ separator: label#+offset (e.g., "delay#+100", "delay^+100")
-  const exprHashMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)[#^]([+\-])(\d+)$/);
-  if (exprHashMatch) {
-    const label = exprHashMatch[1].toLowerCase();
-    const op = exprHashMatch[2];
-    const offset = parseInt(exprHashMatch[3], 10);
+  // Label reference with # or ^ suffix, optionally followed by an offset expression.
+  // Examples: "delay#", "delay#-100", "ap23_24#-excursion-1" (where excursion is an equate)
+  const labelHashMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)[#^](.*)$/);
+  if (labelHashMatch) {
+    const label = labelHashMatch[1].toLowerCase();
+    const offsetExpr = labelHashMatch[2].trim();
 
     if (!(label in symbols)) {
       throw new Error(`Unresolved label: ${label}`);
     }
 
     const base = symbols[label];
-    const absolute = op === '+' ? base + offset : base - offset;
-    return absolute + MAX_DELAY_RAM;
+    if (!offsetExpr) {
+      return base + MAX_DELAY_RAM;
+    }
+    const ctx: ExprContext = { equates, memoryAddresses: symbols as Record<string, number> };
+    return base + MAX_DELAY_RAM + evaluateExpression(offsetExpr, ctx);
   }
-  
+
   // Expression without # separator: label+offset (e.g., "delay+100")
   const exprMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)([+\-])(\d+)$/);
   if (exprMatch) {
     const label = exprMatch[1].toLowerCase();
     const op = exprMatch[2];
     const offset = parseInt(exprMatch[3], 10);
-    
+
     if (!(label in symbols)) {
       throw new Error(`Unresolved label: ${label}`);
     }
-    
+
     const base = symbols[label];
     return op === '+' ? base + offset : base - offset;
   }
-  
+
   // Bare symbol name without suffix (e.g., "delay")
   // This is common in WRA/RDA instructions
   const bareSymbol = trimmed.toLowerCase();
   if (bareSymbol in symbols) {
     return symbols[bareSymbol];
   }
-  
+
   throw new Error(`Invalid address: ${operand}`);
 }
 
-function parseDelayWriteAddress(operand: string, symbols: Record<string, number>): number {
+function parseDelayWriteAddress(
+  operand: string,
+  symbols: Record<string, number>,
+  equates?: Record<string, { value: string }>,
+): number {
   const trimmed = operand.trim();
 
   // Preserve explicit pointer-relative addressing (# or ^ suffix)
   if (trimmed.includes('#') || trimmed.includes('^')) {
-    return parseAddress(trimmed, symbols);
+    return parseAddress(trimmed, symbols, equates);
   }
 
   // Treat delay memory symbols as pointer-relative by default for writes
@@ -580,7 +584,7 @@ function parseDelayWriteAddress(operand: string, symbols: Record<string, number>
     return symbols[bareSymbol] + MAX_DELAY_RAM;
   }
 
-  return parseAddress(trimmed, symbols);
+  return parseAddress(trimmed, symbols, equates);
 }
 
 /**
@@ -656,18 +660,18 @@ function compileInstruction(
       // Delay memory read: addr, coeff
       case 'rda':
         if (instruction.operands.length >= 1) {
-          operands.push(parseAddress(instruction.operands[0], memoryAddresses));
+          operands.push(parseAddress(instruction.operands[0], memoryAddresses, equates));
         }
         if (instruction.operands.length >= 2) {
           operands.push(parseCoefficient(instruction.operands[1], equates, memoryAddresses));
         }
         break;
-      
+
       // Delay memory write: addr, coeff
       case 'wra':
       case 'wrap':
         if (instruction.operands.length >= 1) {
-          operands.push(parseDelayWriteAddress(instruction.operands[0], memoryAddresses));
+          operands.push(parseDelayWriteAddress(instruction.operands[0], memoryAddresses, equates));
         }
         if (instruction.operands.length >= 2) {
           operands.push(parseCoefficient(instruction.operands[1], equates, memoryAddresses));
@@ -849,21 +853,26 @@ export function compileProgram(
   }
   
   // Build memory address map (memory symbols point to delay RAM addresses)
+  // Note: equates must be built first so MEM size expressions can reference them.
+  const equates: Record<string, { value: string }> = {};
+  for (const [name, symbol] of Object.entries(parseResult.symbols.equates)) {
+    equates[name.toLowerCase()] = { value: symbol.value };
+  }
+
   const memoryAddresses: Record<string, number> = {};
   let currentMemAddr = 0;
   for (const [name, symbol] of Object.entries(parseResult.symbols.memory)) {
     memoryAddresses[name.toLowerCase()] = currentMemAddr;
-    // Parse size and advance pointer
-    const size = parseInt(symbol.size, 10);
-    if (!isNaN(size)) {
-      currentMemAddr += size;
+    // Evaluate size expression (may reference equates, e.g., "740+excursion")
+    try {
+      const size = evaluateExpression(symbol.size, { equates });
+      if (isFinite(size) && size > 0) {
+        currentMemAddr += Math.round(size);
+      }
+    } catch {
+      const size = parseInt(symbol.size, 10);
+      if (!isNaN(size)) currentMemAddr += size;
     }
-  }
-  
-  // Build equates map
-  const equates: Record<string, { value: string }> = {};
-  for (const [name, symbol] of Object.entries(parseResult.symbols.equates)) {
-    equates[name.toLowerCase()] = { value: symbol.value };
   }
   
   // Compile each instruction
