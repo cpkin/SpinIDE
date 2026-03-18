@@ -394,9 +394,8 @@ function evaluateExpression(
   const trimmed = expr.trim();
   if (!trimmed) return 0;
 
-  // Tokenize: split into atoms and operators, respecting unary minus.
-  // We handle tokens like: "- 1 / 256", "Line1 * 256", "-kiap", "0xfc0000"
-  const tokens: Array<{ type: 'num'; value: number } | { type: 'op'; value: string }> = [];
+  type Token = { type: 'num'; value: number } | { type: 'op'; value: string };
+  const tokens: Token[] = [];
   let pos = 0;
   const s = trimmed;
 
@@ -407,35 +406,77 @@ function evaluateExpression(
 
     const ch = s[pos];
 
-    // Operator (but not unary minus)
-    if ((ch === '+' || ch === '-' || ch === '*' || ch === '/') && tokens.length > 0 && tokens[tokens.length - 1].type === 'num') {
-      tokens.push({ type: 'op', value: ch });
+    // Parenthesized sub-expression: (...)
+    if (ch === '(') {
+      let depth = 1;
+      const inner_start = pos + 1;
       pos++;
+      while (pos < s.length && depth > 0) {
+        if (s[pos] === '(') depth++;
+        else if (s[pos] === ')') depth--;
+        pos++;
+      }
+      const inner = s.slice(inner_start, pos - 1);
+      tokens.push({ type: 'num', value: evaluateExpression(inner, ctx) });
       continue;
     }
 
-    // Atom: read until next operator or end
-    // An atom can start with '-' (unary), '$', '0x', '%', digit, or letter
-    let atomStart = pos;
-    // Handle unary minus — skip any whitespace between sign and value (e.g., "- 1/256")
+    // Operator (but not unary): +  -  *  /  |  < (left-shift)  > (right-shift)
+    const lastIsNum = tokens.length > 0 && tokens[tokens.length - 1].type === 'num';
+    if (lastIsNum) {
+      if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '|') {
+        tokens.push({ type: 'op', value: ch });
+        pos++;
+        continue;
+      }
+      // Left-shift: < or <<
+      if (ch === '<') {
+        pos++;
+        if (s[pos] === '<') pos++;
+        tokens.push({ type: 'op', value: '<<' });
+        continue;
+      }
+      // Right-shift: > or >>
+      if (ch === '>') {
+        pos++;
+        if (s[pos] === '>') pos++;
+        tokens.push({ type: 'op', value: '>>' });
+        continue;
+      }
+    }
+
+    // Atom (number, identifier, hex/binary literal).
+    // Track the sign char and value start separately so interior whitespace
+    // (e.g., "+ 1", "- del") is stripped when rebuilding the atom string.
+    let signChar = '';
     if (ch === '-' || ch === '+') {
+      signChar = ch;
       pos++;
+      // Skip whitespace between sign and value (e.g., "- 1/256", "+ del")
       while (pos < s.length && (s[pos] === ' ' || s[pos] === '\t')) pos++;
     }
-    // Read the rest of the atom (identifier, hex literal, number)
-    while (pos < s.length && s[pos] !== '+' && s[pos] !== '*' && s[pos] !== '/' && s[pos] !== ' ' && s[pos] !== '\t') {
-      // A '-' is part of the atom only if it's the first char (unary)
-      if (s[pos] === '-' && pos > atomStart) break;
+    const valueStart = pos;
+    // Read atom chars until operator or whitespace
+    while (pos < s.length) {
+      const c = s[pos];
+      if (c === ' ' || c === '\t' || c === '(' || c === ')') break;
+      if (c === '+' || c === '*' || c === '/' || c === '|' || c === '<' || c === '>') break;
+      // '-' terminates if we already have value chars (binary minus)
+      if (c === '-' && pos > valueStart) break;
       pos++;
     }
 
-    const atom = s.slice(atomStart, pos).trim();
-    if (!atom) continue;
+    const valueStr = s.slice(valueStart, pos);
+    // Reconstruct atom without interior spaces: sign + value
+    const atom = signChar + valueStr;
+    if (!atom || atom === '+' || atom === '-') continue;
 
-    // Handle unary minus on an identifier: "-kiap" → -1 * resolve("kiap")
-    if (atom.startsWith('-') && atom.length > 1 && !/^-?\d/.test(atom) && !atom.startsWith('-$') && !atom.startsWith('-0x') && !atom.startsWith('-%')) {
-      const inner = atom.slice(1);
-      tokens.push({ type: 'num', value: -parseAtomicValue(inner, ctx) });
+    // Unary + on identifier: strip the +, resolve normally
+    if (atom.startsWith('+') && atom.length > 1) {
+      tokens.push({ type: 'num', value: parseAtomicValue(atom.slice(1), ctx) });
+    // Unary minus on identifier: "-kiap" → negate resolved value
+    } else if (atom.startsWith('-') && atom.length > 1 && !/^-[\d$%]/.test(atom) && !atom.startsWith('-0x') && !atom.startsWith('-0X')) {
+      tokens.push({ type: 'num', value: -parseAtomicValue(atom.slice(1), ctx) });
     } else {
       tokens.push({ type: 'num', value: parseAtomicValue(atom, ctx) });
     }
@@ -444,8 +485,7 @@ function evaluateExpression(
   if (tokens.length === 0) return 0;
   if (tokens.length === 1 && tokens[0].type === 'num') return tokens[0].value;
 
-  // Evaluate with precedence: first pass for * and /, second for + and -
-  // Build a flat list alternating num, op, num, op, ...
+  // Build alternating num/op lists
   const nums: number[] = [];
   const ops: string[] = [];
   for (const t of tokens) {
@@ -453,24 +493,33 @@ function evaluateExpression(
     else ops.push(t.value);
   }
 
-  // Pass 1: evaluate * and /
+  // Pass 1: high-precedence operators: * / << >>
   const nums2: number[] = [nums[0]];
   const ops2: string[] = [];
   for (let i = 0; i < ops.length; i++) {
-    if (ops[i] === '*' || ops[i] === '/') {
+    const op = ops[i];
+    const right = nums[i + 1];
+    if (op === '*' || op === '/' || op === '<<' || op === '>>') {
       const left = nums2.pop()!;
-      const right = nums[i + 1];
-      nums2.push(ops[i] === '*' ? left * right : (right !== 0 ? left / right : 0));
+      if (op === '*') nums2.push(left * right);
+      else if (op === '/') nums2.push(right !== 0 ? left / right : 0);
+      else if (op === '<<') nums2.push((left << right) >>> 0);
+      else nums2.push(left >> right);
     } else {
-      ops2.push(ops[i]);
-      nums2.push(nums[i + 1]);
+      ops2.push(op);
+      nums2.push(right);
     }
   }
 
-  // Pass 2: evaluate + and -
+  // Pass 2: low-precedence operators: + - |
   let result = nums2[0];
   for (let i = 0; i < ops2.length; i++) {
-    result = ops2[i] === '+' ? result + nums2[i + 1] : result - nums2[i + 1];
+    const op = ops2[i];
+    const right = nums2[i + 1];
+    if (op === '+') result = result + right;
+    else if (op === '-') result = result - right;
+    else if (op === '|') result = (result | right) >>> 0;
+    else result = result + right; // fallback
   }
 
   return result;
@@ -529,19 +578,16 @@ function parseAddress(
     return base + MAX_DELAY_RAM + evaluateExpression(offsetExpr, ctx);
   }
 
-  // Expression without # separator: label+offset (e.g., "delay+100")
-  const exprMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)([+\-])(\d+)$/);
-  if (exprMatch) {
-    const label = exprMatch[1].toLowerCase();
-    const op = exprMatch[2];
-    const offset = parseInt(exprMatch[3], 10);
-
-    if (!(label in symbols)) {
-      throw new Error(`Unresolved label: ${label}`);
+  // Expression without # separator: label followed by +/- and an offset expression.
+  // Handles spaces and equate names: "delay+100", "del1+del", "mem0_delayd + 1"
+  const labelOpMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*([+\-].+)$/);
+  if (labelOpMatch) {
+    const label = labelOpMatch[1].toLowerCase();
+    const offsetExpr = labelOpMatch[2].trim();
+    if (label in symbols) {
+      const ctx: ExprContext = { equates, memoryAddresses: symbols };
+      return symbols[label] + evaluateExpression(offsetExpr, ctx);
     }
-
-    const base = symbols[label];
-    return op === '+' ? base + offset : base - offset;
   }
 
   // Bare symbol name without suffix (e.g., "delay")
@@ -566,16 +612,15 @@ function parseDelayWriteAddress(
     return parseAddress(trimmed, symbols, equates);
   }
 
-  // Treat delay memory symbols as pointer-relative by default for writes
-  const exprMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)([+\-])(\d+)$/);
-  if (exprMatch) {
-    const label = exprMatch[1].toLowerCase();
-    const op = exprMatch[2];
-    const offset = parseInt(exprMatch[3], 10);
+  // Treat delay memory symbols as pointer-relative by default for writes.
+  // Handles spaces and equate names in offset: "mem0_delayd + 1", "del1+del"
+  const labelOpMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*([+\-].+)$/);
+  if (labelOpMatch) {
+    const label = labelOpMatch[1].toLowerCase();
+    const offsetExpr = labelOpMatch[2].trim();
     if (label in symbols) {
-      const base = symbols[label];
-      const absolute = op === '+' ? base + offset : base - offset;
-      return absolute + MAX_DELAY_RAM;
+      const ctx: ExprContext = { equates, memoryAddresses: symbols };
+      return symbols[label] + evaluateExpression(offsetExpr, ctx) + MAX_DELAY_RAM;
     }
   }
 
