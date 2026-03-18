@@ -377,8 +377,8 @@ function parseAtomicValue(token: string, ctx: ExprContext): number {
 /**
  * Evaluate a simple arithmetic expression with equate resolution.
  *
- * Supports: +, -, *, / between atoms. No parentheses (not needed for SpinASM).
- * Respects operator precedence (* / before + -).
+ * Supports: +, -, *, /, |, <<, >> between atoms and parenthesized sub-expressions.
+ * Respects operator precedence (* / << >> before + - |).
  *
  * Examples:
  *   "-kiap"            → negate equate value
@@ -873,14 +873,6 @@ export function compileProgram(
   const labelLineNumbers: Record<string, number> = {};
   for (const [name, symbol] of Object.entries(parseResult.symbols.labels)) {
     labelLineNumbers[name] = symbol.line;
-  }
-
-  // Build a map from source line number → instruction index
-  const lineToInstructionIndex: Record<number, number> = {};
-  let instrIdx = 0;
-  for (const instr of parseResult.instructions) {
-    lineToInstructionIndex[instr.line] = instrIdx;
-    instrIdx++;
   }
 
   // For labels, find the first instruction at or after the label's source line
