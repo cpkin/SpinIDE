@@ -1,6 +1,6 @@
 # FV-1 Development Guide
 
-This is the canonical reference for developing FV-1 SpinASM programs, intended for use by human developers and AI agents alike. It covers the instruction set, memory model, fixed-point math, LFO/CHO behavior, file format requirements, metadata schema, and common patterns.
+This is the canonical reference for developing FV-1 SpinASM programs, intended for use by human developers and AI agents alike. It covers the instruction set, memory model, fixed-point math, LFO/CHO behavior, file format requirements, metadata schema, and production-tested DSP patterns drawn from analysis of 100+ real-world FV-1 programs.
 
 ---
 
@@ -9,17 +9,65 @@ This is the canonical reference for developing FV-1 SpinASM programs, intended f
 The **Spin Semiconductor FV-1** is an 8-program DSP chip for audio effects (reverb, delay, chorus, etc.). It is widely used in guitar pedal DIY builds.
 
 Key hardware facts:
-- **Sample rate:** 32 kHz (fixed, not configurable)
+- **Sample rate:** 32,768 Hz (fixed, not configurable)
 - **Program memory:** 128 instruction slots per program, 8 programs total per EEPROM
-- **Delay RAM:** 32,768 samples shared across the program (~1.02 seconds total)
+- **Delay RAM:** 32,768 samples shared across the program (~1.0 seconds total)
 - **Potentiometers:** 3 external pots (POT0, POT1, POT2), read once per 32-sample block
 - **Registers:** 32 general-purpose registers (REG0–REG31) plus named special registers
 - **Accumulators:** ACC (current accumulator), PACC (previous accumulator), LR (left-right crossfade register)
 - **Audio I/O:** ADCL (left input), ADCR (right input), DACL (left output), DACR (right output)
+- **LFOs:** 2 sine (SIN0, SIN1) + 2 ramp (RMP0, RMP1) — hardware-generated, zero instruction cost per sample
 
 ---
 
-## 2. Critical File Format Requirement — CRLF Line Endings
+## 2. Recommended Program Structure
+
+Every well-written FV-1 program follows this order (based on conventions observed across the Spin Semi GA_DEMO series, mstratman collection, and audiofab examples):
+
+```asm
+; 1. HEADER — effect name, pot descriptions, author
+; My Awesome Reverb
+; POT0 = Reverb Time    POT1 = Damping    POT2 = Mix
+
+; 2. MEMORY DECLARATIONS
+MEM ap1   334         ; allpass diffuser 1
+MEM ap2   556         ; allpass diffuser 2
+MEM del1  8192        ; main delay line
+
+; 3. REGISTER ALIASES (EQU)
+EQU mono   REG0       ; mono input sum
+EQU lp1    REG1       ; lowpass filter state
+EQU temp   REG2       ; scratch register
+EQU krt    0.55       ; reverb time coefficient
+EQU kap    0.6        ; allpass coefficient
+
+; 4. INITIALIZATION (skp RUN guard)
+skp RUN, main
+wrax lp1, 0           ; clear filter states
+wlds SIN0, 12, 100    ; init sine LFO
+main:
+
+; 5. POT READING & PROCESSING
+rdax POT0, 1.0
+sof  0.8, 0.1         ; scale to 0.1–0.9 range
+wrax krt, 0
+
+; 6. INPUT READING
+rdax ADCL, 0.5
+rdax ADCR, 0.5        ; sum to mono
+wrax mono, 0
+
+; 7. SIGNAL PROCESSING (core DSP algorithm)
+; ... allpass filters, delay reads/writes, shelving EQ ...
+
+; 8. OUTPUT WRITING
+wrax DACL, 1.0        ; write left output, keep in ACC
+wrax DACR, 0.0        ; write right output, clear ACC
+```
+
+---
+
+## 3. Critical File Format Requirement — CRLF Line Endings
 
 **SpinASM (the official Windows assembler) requires CRLF line endings (`\r\n`) in all `.spn` source files.**
 
@@ -30,13 +78,7 @@ SpinASM only runs on Windows and uses Windows-style line endings. Files with Uni
 - **CRLF** = Carriage Return + Line Feed = two bytes: `\r\n` (hex `0D 0A`) — Windows standard
 - **LF** = Line Feed only = one byte: `\n` (hex `0A`) — Unix/Linux/macOS standard
 
-### Why this matters for generated files
-
-When generating `.spn` files on Linux or macOS (including from AI tools, scripts, or CI pipelines), the output will naturally use LF-only line endings. These files **will not assemble correctly** in SpinASM.
-
 ### How to convert
-
-Every `.spn` file destined for SpinASM must have its line endings converted before use:
 
 ```bash
 # Convert LF → CRLF using sed (safe, in-place)
@@ -48,41 +90,30 @@ unix2dos yourfile.spn
 # Verify line endings are CRLF
 file yourfile.spn
 # Expected: "ASCII text, with CRLF line terminators"
-
-# Or inspect with xxd
-xxd yourfile.spn | grep "0d 0a"
 ```
 
 ### Rule for agents and code generators
 
 > **Any tool, script, or AI agent that writes `.spn` files must either produce CRLF line endings natively, or include a conversion step before the file is used with SpinASM.**
 
-If writing a shell script that generates `.spn` files on Linux:
-
-```bash
-# Write with CRLF from the start using printf
-printf "rdax ADCL,1.0\r\nwrax DACL,0.0\r\n" > effect.spn
-
-# Or pipe through sed after writing
-python generate_effect.py > effect.spn && sed -i 's/$/\r/' effect.spn
-```
-
 Note: The SpinGPT simulator accepts both LF and CRLF. CRLF is only required when using the official SpinASM assembler on Windows.
 
 ---
 
-## 3. SpinASM Dialect
+## 4. SpinASM Dialect
 
-### 3.1 Lexical Rules
+### 4.1 Lexical Rules
 
 - **Case-insensitive:** `RDAX`, `rdax`, and `Rdax` are all valid
 - **Comments:** semicolon (`;`) starts a comment and runs to end of line
 - **Whitespace:** spaces and tabs are interchangeable; multiple whitespace collapses to a single separator
-- **Line endings:** both LF and CRLF accepted by SpinGPT; CRLF **required** by SpinASM (see Section 2)
+- **Line endings:** both LF and CRLF accepted by SpinGPT; CRLF **required** by SpinASM (see Section 3)
 - **Operand separators:** commas separate operands
 - **Jump target labels:** identified by a trailing colon (e.g., `start:`)
+- **Binary literals:** `%` prefix (e.g., `%01100000_00000000_00000000`), underscores optional for readability
+- **Hex literals:** `$` or `0x` prefix (e.g., `$7FFF00` or `0x7FFF00`)
 
-### 3.2 Directives
+### 4.2 Directives
 
 #### `EQU label value`
 
@@ -107,24 +138,20 @@ Allocates delay memory and defines three address labels:
 - `label#` — end address (size-1)
 
 ```asm
-MEM delay1  24576   ; ~0.77 seconds at 32kHz
+MEM delay1  24576   ; ~0.75 seconds at 32768 Hz
 MEM delayL  16384
 MEM delayR  16384   ; total = 32768 (maximum)
 ```
 
 - Size is in samples (integer)
 - Memory is allocated sequentially; total must not exceed 32,768 samples
-- 32,768 samples = ~1.02 seconds of delay at 32 kHz
+- 32,768 samples = ~1.0 seconds of delay at 32,768 Hz
 
 #### `ORG address`
 
-Sets the instruction counter origin for subsequent instructions. Rarely needed; useful for placing code at specific slot positions.
+Sets the instruction counter origin for subsequent instructions. Rarely needed.
 
-```asm
-ORG 0
-```
-
-### 3.3 Label Rules
+### 4.3 Label Rules
 
 - **Constant labels** (`EQU`, `MEM`): must be defined before use
 - **Jump target labels** (e.g., `start:`): may be forward-referenced by `skp`/`jmp`
@@ -133,9 +160,9 @@ ORG 0
 
 ---
 
-## 4. Instruction Set Reference
+## 5. Instruction Set Reference
 
-### 4.1 Special Registers
+### 5.1 Special Registers
 
 | Register | Description |
 |---|---|
@@ -149,7 +176,7 @@ ORG 0
 | `ADDR_PTR` | Address pointer for `rmpa` |
 | `REG0`–`REG31` | General-purpose registers |
 
-### 4.2 SKP Condition Flags
+### 5.2 SKP Condition Flags
 
 | Flag | Meaning |
 |---|---|
@@ -161,7 +188,7 @@ ORG 0
 
 Flags can be combined with `|` (bitwise OR). Example: `skp GEZ|ZRC,label`
 
-### 4.3 Full Instruction Listing
+### 5.3 Full Instruction Listing
 
 #### Delay Memory
 
@@ -177,10 +204,10 @@ Flags can be combined with `|` (bitwise OR). Example: `skp GEZ|ZRC,label`
 | Mnemonic | Operands | Description |
 |---|---|---|
 | `rdax` | `REGISTER, MULTIPLIER` | ACC += REGISTER * MULTIPLIER |
-| `rdfx` | `REGISTER, MULTIPLIER` | ACC = (ACC - REGISTER) * MULTIPLIER + REGISTER |
+| `rdfx` | `REGISTER, MULTIPLIER` | ACC = (ACC - REGISTER) * MULTIPLIER + REGISTER (one-pole lowpass) |
 | `ldax` | `REGISTER` | ACC = REGISTER (load, replaces ACC) |
 | `wrax` | `REGISTER, MULTIPLIER` | REGISTER = ACC; ACC = ACC * MULTIPLIER |
-| `wrhx` | `REGISTER, MULTIPLIER` | REGISTER = ACC; ACC = ACC * MULTIPLIER + PACC * (1 - |MULTIPLIER|) (high shelf) |
+| `wrhx` | `REGISTER, MULTIPLIER` | REGISTER = ACC; ACC = ACC * MULTIPLIER + PACC * (1 - \|MULTIPLIER\|) (high shelf) |
 | `wrlx` | `REGISTER, MULTIPLIER` | REGISTER = ACC; ACC = PACC + MULTIPLIER * (ACC - PACC) (low shelf) |
 
 #### Arithmetic
@@ -188,10 +215,10 @@ Flags can be combined with `|` (bitwise OR). Example: `skp GEZ|ZRC,label`
 | Mnemonic | Operands | Description |
 |---|---|---|
 | `sof` | `MULTIPLIER, OFFSET` | ACC = ACC * MULTIPLIER + OFFSET |
-| `maxx` | `REGISTER, MULTIPLIER` | ACC = max(|ACC|, |REGISTER * MULTIPLIER|) |
-| `absa` | *(none)* | ACC = |ACC| |
+| `maxx` | `REGISTER, MULTIPLIER` | ACC = max(\|ACC\|, \|REGISTER * MULTIPLIER\|) |
+| `absa` | *(none)* | ACC = \|ACC\| |
 | `mulx` | `REGISTER` | ACC = ACC * REGISTER |
-| `log` | `MULTIPLIER, OFFSET` | ACC = log2(|ACC|) * MULTIPLIER + OFFSET |
+| `log` | `MULTIPLIER, OFFSET` | ACC = log2(\|ACC\|) * MULTIPLIER + OFFSET |
 | `exp` | `MULTIPLIER, OFFSET` | ACC = 2^ACC * MULTIPLIER + OFFSET |
 
 #### Bitwise
@@ -227,7 +254,7 @@ Flags can be combined with `|` (bitwise OR). Example: `skp GEZ|ZRC,label`
 |---|---|---|
 | `raw` | `U32` | Insert a raw 32-bit instruction word directly |
 
-### 4.4 Operand Constraints
+### 5.4 Operand Constraints
 
 - **Multipliers:** S1.9 fixed-point, range -2.0 to +1.99 (approximately)
 - **Offsets (sof/log/exp):** S1.9 fixed-point, range -1.0 to +1.0
@@ -239,7 +266,7 @@ Flags can be combined with `|` (bitwise OR). Example: `skp GEZ|ZRC,label`
 
 ---
 
-## 5. Fixed-Point Math Model
+## 6. Fixed-Point Math Model
 
 The FV-1 uses **S1.23 fixed-point arithmetic** for all audio operations.
 
@@ -253,16 +280,27 @@ The FV-1 uses **S1.23 fixed-point arithmetic** for all audio operations.
 - Some bit operations treat the value as a raw integer (AND, OR, XOR, NOT)
 - When in doubt, protect against overflow with `sof 1.0, 0` to clamp or attenuate input
 
+### Gain Staging (Critical)
+
+Gain staging is the single most important practical concern in FV-1 programming. Because the accumulator saturates at ±1.0, you must carefully manage signal levels throughout the processing chain:
+
+- **Attenuate early, amplify late.** Sum inputs at reduced levels (e.g., `rdax ADCL, 0.5`) to leave headroom for processing.
+- **Feedback loops must attenuate.** Any feedback path multiplied by 1.0 or higher will clip within a few samples. Use coefficients like 0.5–0.9.
+- **Multiply = reduce level.** Multiplying two signals both at 0.5 gives 0.25. You may need `sof 2.0, 0` to recover level after multiplication.
+- **Monitor for silent output.** If output is silent, check that you wrote to DACL/DACR and that your signal chain doesn't attenuate to zero.
+- **Monitor for clipped output.** If output sounds distorted, add attenuation: `sof 0.7, 0.0` before the output stage.
+
 ### Practical Tips
 
 - Audio inputs from ADC are already normalized to ±1.0
-- When multiplying two signals, the result may need scaling (multiplying two 0.5-amplitude signals gives 0.25)
 - Use `sof` to apply a gain factor: `sof 0.5, 0.0` halves the signal
 - Use `log`/`exp` for compression/expansion effects (log domain processing)
+- Invert a signal: `sof -1.0, 0.0`
+- Compute `1 - x`: load x, then `sof -1.0, 1.0` (result = 1 - ACC)
 
 ---
 
-## 6. Delay Memory Model
+## 7. Delay Memory Model
 
 ### Addressing
 
@@ -281,7 +319,7 @@ Given `MEM echo 8192`:
 ### Reading and Writing Delay
 
 ```asm
-MEM echo 8192   ; allocate ~0.256s delay
+MEM echo 8192   ; allocate ~0.25s delay
 
 ; Write current ACC to start of buffer, zero ACC
 wra echo, 0.0
@@ -297,72 +335,139 @@ rda echo^, 0.7
 
 The FV-1 hardware maintains a single delay write pointer that advances by one sample per clock. All delay addresses are relative to this pointer. This means `wra` and `rda` addresses are **relative offsets into the past**, not absolute memory positions. This is handled automatically by the hardware and assembler.
 
+### Memory Allocation Tips
+
+- **Allpass filters** use small buffers: 100–2000 samples
+- **Main delay lines** range from 1000 (30ms) to 32767 (1 second max)
+- **Reverb programs** typically use 18,000–32,000 total samples across all lines
+- **Use prime-number lengths** for reverb delay lines to avoid frequency coloring and metallic ringing
+- **Add headroom for LFO modulation.** If a delay line will be CHO-modulated, allocate extra samples (e.g., `MEM del 4096+200`) so the LFO sweep doesn't read past the buffer boundary
+
 ---
 
-## 7. LFO and CHO Reference
+## 8. LFO and CHO Reference
 
-### 7.1 LFO Types
+### 8.1 LFO Types
 
 The FV-1 has four hardware LFOs:
-- **SIN0, SIN1** — sine wave oscillators
-- **RMP0, RMP1** — ramp (sawtooth) oscillators
+- **SIN0, SIN1** — sine wave oscillators (for chorus, flanger, reverb modulation)
+- **RMP0, RMP1** — ramp (sawtooth) oscillators (for pitch shifting)
 
-### 7.2 Configuring LFOs
+### 8.2 Configuring LFOs
 
 ```asm
-; Configure SIN0: frequency=57 (~1.7 Hz at 32kHz), amplitude=32768
-wlds SIN0, 57, 32768
+; Configure SIN0: frequency=12 (~0.5 Hz), amplitude=100 (~100-sample sweep)
+wlds SIN0, 12, 100
 
-; Configure RMP0: frequency=128, amplitude=32767
-wldr RMP0, 128, 32767
+; Configure RMP0 for octave-up pitch shift
+wldr RMP0, 16384, 4096
 
-; Reset RMP0 phase to zero (useful for syncing LFOs)
+; Common ramp rates for pitch shifting:
+;   16384  = octave up
+;  -16384  = octave down (negative = reverse direction)
+;  -8192   = octave down (alternative)
+;   2006   = whole tone up
+;   974    = semitone up
+
+; Reset RMP0 phase to zero (useful for syncing)
 jam RMP0
 ```
 
-### 7.3 CHO Instruction
+### 8.3 CHO Instruction
 
-`cho` is the primary instruction for LFO-modulated delay access (chorus, vibrato, flanger):
+`cho` is the primary instruction for LFO-modulated delay access (chorus, vibrato, flanger, pitch shift):
 
 ```asm
 cho RDA,  SIN0, REG|COMPC, delayaddr   ; LFO-modulated delay read + accumulate
-cho RDAL, SIN0, REG|COMPC, delayaddr   ; Same but loads ACC (replaces)
+cho RDAL, SIN0, 0, 0                   ; Load LFO value into ACC (useful for reading LFO state)
 cho SOF,  SIN0, 0, 0                   ; Scale ACC by LFO value
-cho RAMP, RMP0, RAMP|RANGE|NA, 0       ; Ramp LFO address interpolation
 ```
 
 **CHO flags (can be combined with `|`):**
 
 | Flag | Description |
 |---|---|
+| `SIN` | Sine LFO mode (default for SIN0/SIN1) |
+| `COS` | Use cosine phase instead of sine |
 | `REG` | Use LFO value from register (normal operation) |
 | `COMPC` | Use complement of coefficient for crossfade |
 | `COMPA` | Use complement of address offset |
-| `RAMP` | Ramp interpolation mode (use with RMP LFOs) |
-| `RANGE` | Scale address by LFO amplitude range |
+| `RPTR2` | Second read pointer (half-ramp offset, for ramp crossfade) |
 | `NA` | No accumulate (replaces ACC instead of adding) |
-| `COS` | Use cosine phase instead of sine |
 
-### 7.4 Chorus Pattern Example
+### 8.4 Chorus Pattern (Sine LFO)
+
+The standard chorus uses two adjacent CHO reads for interpolation:
 
 ```asm
 MEM chorus 2048
 
 ; Init
-wlds SIN0, 57, 2048
+skp RUN, main
+wlds SIN0, 12, 100    ; slow sine, moderate depth
+main:
 
-; Per-sample
+; Write input to delay
 ldax ADCL
 wra chorus, 0.0
 
-cho RDA, SIN0, REG|COMPC, chorus
-cho RDA, SIN0, REG, chorus+1    ; dual-tap for smooth interpolation
+; Interpolated LFO-modulated read (two taps)
+cho RDA, SIN0, SIN|REG|COMPC, chorus+100
+cho RDA, SIN0, SIN,            chorus+101
 wrax DACL, 0.0
+```
+
+### 8.5 Pitch Shifting Pattern (Ramp LFO)
+
+Pitch shifting uses a ramp LFO with crossfade between two read pointers to avoid clicks at the ramp reset point:
+
+```asm
+MEM pdel 4096
+
+; Init
+skp RUN, main
+wldr RMP0, 16384, 4096    ; octave up
+main:
+
+; Write input to delay
+ldax ADCL
+wra pdel, 0
+
+; First read pointer (interpolated)
+cho RDA, RMP0, REG|COMPC, pdel
+cho RDA, RMP0, 0,         pdel+1
+wra  temp_mem, 0                     ; save first tap
+
+; Second read pointer (half-ramp offset)
+cho RDA, RMP0, RPTR2|COMPC, pdel
+cho RDA, RMP0, RPTR2,       pdel+1
+
+; Crossfade between the two taps
+cho SOF, RMP0, NA|COMPC, 0           ; multiply by (1 - crossfade)
+cho RDA, RMP0, NA, temp_mem          ; add first tap * crossfade
+
+wrax DACL, 0.0
+```
+
+### 8.6 LFO Smearing for Reverb
+
+To reduce metallic ringing in reverb allpass filters, modulate them with a slow sine LFO. Use sin, cos, inverted sin, and inverted cos for decorrelated modulation across multiple allpasses:
+
+```asm
+; Modulate allpass tap with SIN0 (flags 0x06 = SIN|REG|COMPC)
+cho RDA, SIN0, SIN|REG|COMPC, ap1+50
+cho RDA, SIN0, SIN,            ap1+51
+wra ap1+100, 0
+
+; Use COS for a second allpass (decorrelated)
+cho RDA, SIN0, COS|REG|COMPC, ap2+50
+cho RDA, SIN0, COS,            ap2+51
+wra ap2+100, 0
 ```
 
 ---
 
-## 8. I/O Modes
+## 9. I/O Modes
 
 FV-1 programs can operate in three I/O configurations:
 
@@ -372,11 +477,21 @@ FV-1 programs can operate in three I/O configurations:
 | `mono_stereo` | ADCL only | DACL + DACR | Mono-in stereo-out (ping-pong delay, stereo reverb) |
 | `stereo_stereo` | ADCL + ADCR | DACL + DACR | True stereo processing |
 
-ADCR is only meaningful in `stereo_stereo` mode. Writing both DACL and DACR is needed for `mono_stereo` and `stereo_stereo` modes; in `mono_mono` mode, only write DACL.
+### Input Summing to Mono
+
+Nearly every mono-processing program sums stereo input to mono first:
+
+```asm
+rdax ADCL, 0.5
+rdax ADCR, 0.5        ; ACC = (left + right) / 2
+wrax mono, 0          ; store mono sum
+```
+
+The 0.5 coefficients prevent clipping when both channels are at full scale.
 
 ---
 
-## 9. Resource Limits
+## 10. Resource Limits
 
 These limits are enforced in hardware and must be respected:
 
@@ -390,11 +505,16 @@ These limits are enforced in hardware and must be respected:
 
 If your instruction count is less than 128, SpinASM pads the remainder with `nop` automatically. You do not need to manually add `nop` instructions to reach 128 unless you are using `ORG` to place code at specific positions.
 
+The 128-instruction limit is the primary constraint when writing complex effects. Techniques to save instructions:
+- Use `wrax REG, 1.0` (store and keep) instead of `wrax REG, 0` followed by `ldax REG` (saves 1 instruction)
+- Combine operations: `rdax REG, 1.0` adds to ACC without a separate load
+- Pre-compute constants with `EQU` rather than computing them at runtime
+
 ---
 
-## 10. Common Patterns
+## 11. Common Patterns
 
-### 10.1 Unity Gain Passthrough (Mono)
+### 11.1 Unity Gain Passthrough (Mono)
 
 ```asm
 ; Read left input, write to left output unchanged
@@ -402,74 +522,329 @@ ldax ADCL
 wrax DACL, 0.0
 ```
 
-### 10.2 Wet/Dry Mix with POT
+### 11.2 First-Sample Initialization Guard
+
+The `RUN` flag in `skp` is 0 on the very first sample after chip reset and 1 thereafter. Use it to initialize registers and LFOs once:
 
 ```asm
-; POT2 controls mix: 0 = dry, 1 = wet
-; wet is in REG0, dry is ADCL
-
-; Mix: ACC = dry * (1 - mix) + wet * mix
-ldax POT2           ; ACC = mix value
-mulx REG0           ; ACC = wet * mix
-wrax REG1, 0.0      ; store wet*mix
-
-sof 1.0, 0.0        ; restore
-ldax POT2
-sof -1.0, 1.0       ; ACC = 1 - mix
-mulx ADCL           ; ACC = dry * (1 - mix)
-rdax REG1, 1.0      ; ACC += wet * mix
-wrax DACL, 0.0
-```
-
-### 10.3 First-Sample Initialization Guard
-
-The `RUN` flag in `skp` is 0 on the very first sample after chip reset and 1 thereafter. Use it to initialize registers once:
-
-```asm
-; Skip init block on all samples after the first
 skp RUN, main
 
 ; Initialization (runs once)
-ldax ADCL
-wrax REG0, 0.0
-clr
-wra delay, 0.0
+wrax lp1, 0           ; clear filter states
+wrax lp2, 0
+wlds SIN0, 12, 100    ; init sine LFO
+wldr RMP0, 0, 4096    ; init ramp LFO (rate=0, will be set by pot)
 
 main:
 ; Normal per-sample processing
 ```
 
-### 10.4 Feedback Delay
+### 11.3 Pot Reading and Control Curves
+
+#### Basic pot reading with range scaling
 
 ```asm
-MEM dly  24576     ; ~0.77s
+; POT0 raw range is 0.0 to ~1.0
+; Scale to 0.1–0.9 for reverb time
+rdax POT0, 1.0
+sof  0.8, 0.1         ; ACC = POT0 * 0.8 + 0.1
+wrax rt, 0            ; store as control variable
+```
 
-EQU time    POT0
-EQU fb      POT1
-EQU mix     POT2
+#### Squared pot curve (slower onset, finer low-end control)
+
+```asm
+; Square the pot value for logarithmic-feel response
+rdax POT1, 1.0
+mulx POT1             ; ACC = POT1^2 (range still 0–1, but curved)
+sof  0.4, 0.01        ; scale to desired range
+wrax rate, 0
+```
+
+#### Pot smoothing (one-pole filter to remove zipper noise)
+
+```asm
+; Smooth pot changes to avoid audible stepping
+rdax POT0, 1.0
+rdfx potfil, 0.02     ; very slow lowpass (~1.5 Hz cutoff)
+wrax potfil, 0        ; store filtered pot value
+; Use potfil instead of POT0 in subsequent processing
+```
+
+### 11.4 Allpass Filter
+
+The allpass filter is the fundamental building block of reverb. It passes all frequencies at equal amplitude but shifts their phase, creating diffusion:
+
+```asm
+MEM ap1 500            ; allpass delay buffer
+
+; Canonical allpass: rda from end, wrap to start
+; Coefficient magnitude must match (one negative, one positive)
+rda  ap1#, kap         ; read end of delay, scale by +kap
+wrap ap1,  -kap        ; write to start, scale ACC by -kap, add LR
+```
+
+Where `kap` is typically 0.5 to 0.7. Higher values = more diffusion but risks instability.
+
+**Cascaded allpass bank** (used for reverb input diffusion):
+
+```asm
+MEM ap1  334           ; mutually prime sizes
+MEM ap2  556           ; reduce frequency coloring
+MEM ap3  871
+
+EQU kap  0.6
+
+; Input diffusion: 3 allpasses in series
+rda  ap1#, kap
+wrap ap1,  -kap
+rda  ap2#, kap
+wrap ap2,  -kap
+rda  ap3#, kap
+wrap ap3,  -kap
+; ACC now contains diffused signal
+```
+
+### 11.5 Shelving Filters (wrhx / wrlx)
+
+The `wrhx` and `wrlx` instructions implement single-instruction shelving filters — extremely useful inside reverb loops for frequency-dependent damping.
+
+#### Low-pass shelving (high-frequency damping)
+
+```asm
+; Damp high frequencies in a reverb loop
+; krf = filter frequency (0.01=dark, 0.5=bright)
+; krs = shelf depth (use -1.0 for full cut, -0.6 for moderate)
+rdfx lp1, krf         ; one-pole lowpass
+wrlx lp1, krs         ; shelving: ACC = PACC + krs*(ACC-PACC)
+```
+
+This attenuates frequencies above the cutoff set by `krf`. Inside a reverb feedback loop, it simulates air absorption (high frequencies decay faster).
+
+#### High-pass shelving (low-frequency damping)
+
+```asm
+; Damp low frequencies (prevent rumble buildup)
+rdfx hp1, krf
+wrhx hp1, krs         ; high shelf: ACC = ACC*krs + PACC*(1-|krs|)
+```
+
+#### DC blocking high-pass (essential utility)
+
+```asm
+; Remove DC offset — use at the end of any feedback chain
+rdfx dc_block, 0.02   ; very low cutoff (~1 Hz)
+wrhx dc_block, -1.0   ; full high-pass: removes everything below cutoff
+```
+
+### 11.6 Reverb Tank Architecture
+
+The standard FV-1 reverb uses a **4-stage ring topology** with allpass diffusion and shelving EQ. This pattern appears in the Spin Semi ROM programs, Dattorro implementations, and most community reverbs:
+
+```asm
+; MEMORY: 4 delay lines + 4 embedded allpasses
+MEM del1 3559          ; prime-number lengths for natural sound
+MEM ap1a  241
+MEM del2 4007
+MEM ap2a  307
+MEM del3 3371
+MEM ap3a  269
+MEM del4 4519
+MEM ap4a  353
+
+EQU krt  0.55          ; reverb time (feedback coefficient)
+EQU kap  0.6           ; allpass diffusion
+EQU krf  0.4           ; LP filter frequency (damping)
+EQU krs -0.6           ; LP shelf depth
+
+; --- Ring stage 1 ---
+rda  del4#, krt        ; read end of previous delay, scale by RT
+rda  ap1a#, kap        ; input diffusion allpass
+wrap ap1a,  -kap
+rdfx lp1, krf          ; shelving lowpass (damping)
+wrlx lp1, krs
+rdax input, 1.0        ; inject input signal
+wra  del1, 0           ; write to delay 1
+
+; --- Ring stage 2 ---
+rda  del1#, krt
+rda  ap2a#, kap
+wrap ap2a,  -kap
+rdfx lp2, krf
+wrlx lp2, krs
+wra  del2, 0
+
+; --- Ring stage 3 ---
+rda  del2#, krt
+rda  ap3a#, kap
+wrap ap3a,  -kap
+rdfx lp3, krf
+wrlx lp3, krs
+wra  del3, 0
+
+; --- Ring stage 4 ---
+rda  del3#, krt
+rda  ap4a#, kap
+wrap ap4a,  -kap
+rdfx lp4, krf
+wrlx lp4, krs
+wra  del4, 0
+
+; --- Output: multi-tap for stereo image ---
+rda  del1+2630, 1.0    ; different tap offsets
+rda  del2+1943, 1.0    ; create stereo width
+wrax DACL, 0.0         ; left output
+
+rda  del3+3200, 1.0
+rda  del4+4016, 1.0
+wrax DACR, 0.0         ; right output
+```
+
+**Key principles:**
+- Use **prime-number delay lengths** to avoid frequency coloring
+- **krt** (reverb time) must be < 1.0 to prevent infinite buildup (typical: 0.3–0.95)
+- **Shelving LPF** inside the loop simulates air absorption (highs decay faster)
+- **Output taps** from different points in the ring create natural stereo image
+- Left and right outputs use **different tap positions** for decorrelation
+
+### 11.7 Feedback Delay
+
+```asm
+MEM dly  24576         ; ~0.75s
+
 EQU dly_out REG0
+EQU fb      REG1
 
 skp RUN, main
 clr
 wra dly, 0.0
 
 main:
-rdax ADCL, 1.0     ; ACC = dry input
-rdax dly_out, 1.0  ; ACC += delayed signal (feedback)
-wra dly, 0.0       ; write to delay, clear ACC
-rda dly#, 1.0      ; ACC = oldest delay sample
-wrax dly_out, 0.0  ; store for next cycle
+; Read pot for feedback amount
+rdax POT1, 1.0
+sof  0.9, 0.0         ; cap at 0.9 to prevent runaway
+wrax fb, 0
 
-; Output mix
+; Input + feedback
+rdax ADCL, 1.0
+rdax dly_out, 1.0     ; add delayed signal (feedback)
+mulx fb               ; scale feedback
+wra dly, 0.0          ; write to delay, clear ACC
+rda dly#, 1.0         ; read oldest sample
+wrax dly_out, 0.0     ; store for next cycle feedback
+```
+
+### 11.8 Variable Delay with ADDR_PTR
+
+For pot-controlled delay time (variable read position):
+
+```asm
+MEM vdel 32765         ; maximum delay
+
+; Calculate read address from pot
+clr
+or   $7FFF00           ; load max address (top bits)
+mulx POT0              ; scale by pot (0 = no delay, 1 = max)
+wrax ADDR_PTR, 0.0     ; set address pointer
+
+; Write input
 ldax ADCL
-mulx mix            ; ACC = dry * mix
-rdax dly_out, 1.0   ; add delayed
+wra  vdel, 0
+
+; Read from variable position
+rmpa 1.0               ; read delay at ADDR_PTR
 wrax DACL, 0.0
+```
+
+### 11.9 Wet/Dry Mix
+
+#### Simple crossfade mix (POT controls blend)
+
+```asm
+; wet signal in REG0, dry is ADCL, POT2 = mix
+; Result: output = dry*(1-mix) + wet*mix
+
+rdax POT2, 1.0        ; ACC = mix
+mulx REG0             ; ACC = wet * mix
+wrax REG1, 0.0        ; store wet component
+
+ldax POT2
+sof  -1.0, 1.0        ; ACC = 1 - mix
+mulx ADCL             ; ACC = dry * (1 - mix)
+rdax REG1, 1.0        ; add wet component
+wrax DACL, 0.0
+```
+
+#### Difference method (more efficient, 1 fewer instruction)
+
+```asm
+; Equivalent to above but uses subtraction trick
+; wet in REG0, dry = ADCL
+rdax ADCL, -1.0       ; ACC = -dry
+rdax REG0, 1.0        ; ACC = wet - dry
+mulx POT2             ; ACC = mix * (wet - dry)
+rdax ADCL, 1.0        ; ACC = dry + mix*(wet - dry)
+wrax DACL, 0.0
+```
+
+### 11.10 Envelope Detection
+
+Useful for auto-wah, compressor, noise gate:
+
+```asm
+EQU env    REG5        ; envelope follower state
+EQU avg    REG6        ; smoothed envelope
+
+; Rectify and smooth the input
+ldax ADCL
+absa                   ; full-wave rectify: ACC = |input|
+rdfx avg, 0.01        ; one-pole smooth (attack/release ~10ms)
+wrax avg, 0           ; store smoothed envelope
+; avg now holds the signal envelope (0 to ~1.0)
+```
+
+### 11.11 Soft Clipping Overdrive
+
+Implements `Vout = Vin / (|Vin| + threshold)` using log/exp domain:
+
+```asm
+EQU mono   REG0
+EQU gain   REG1
+
+; Read and store input
+rdax ADCL, 0.5
+rdax ADCR, 0.5
+wrax mono, 1.0
+
+; Apply drive (pot-controlled gain)
+rdax POT0, 1.0
+sof  0.9, 0.1         ; gain range 0.1 to 1.0
+wrax gain, 0
+
+; Soft clip: V/(|V|+threshold)
+ldax mono
+absa                   ; |Vin|
+rdax gain, 1.0         ; |Vin| + threshold
+log  -1.0, -0.3        ; compute 1/(|Vin|+threshold) via log
+exp  1.0, 0            ; back to linear domain
+mulx mono              ; Vin * 1/(|Vin|+threshold)
+wrax DACL, 0.0
+```
+
+### 11.12 Triangle Wave from Ramp LFO
+
+Convert a ramp LFO to triangle wave (useful for tremolo, flanger):
+
+```asm
+cho  RDAL, RMP0        ; read ramp value into ACC (0 to 1 sawtooth)
+sof  1.0, -0.25        ; offset to center
+absa                   ; fold negative half → triangle wave
+wrax tri, 0            ; store triangle (0 to 0.5 range)
 ```
 
 ---
 
-## 11. Error Handling Policy (SpinASM Behavior)
+## 12. Error Handling Policy (SpinASM Behavior)
 
 SpinASM and SpinGPT follow these error handling conventions:
 
@@ -486,11 +861,11 @@ When iterating with an AI tool, use the "Copy errors" feature in SpinGPT to past
 
 ---
 
-## 12. SpinGPT Metadata Schema (`;@fx` Headers)
+## 13. SpinGPT Metadata Schema (`;@fx` Headers)
 
 SpinGPT supports optional structured metadata in `.spn` files for signal path diagram generation, pot labeling, and enhanced UI features. Metadata is **not required** for the assembler or simulator — it is SpinGPT-specific.
 
-### 12.1 Format
+### 13.1 Format
 
 Metadata is embedded as structured comments at the top of the file:
 
@@ -518,7 +893,7 @@ Metadata is embedded as structured comments at the top of the file:
 ;@fx }
 ```
 
-### 12.2 Field Reference
+### 13.2 Field Reference
 
 | Field | Required | Type | Description |
 |---|---|---|---|
@@ -529,7 +904,7 @@ Metadata is embedded as structured comments at the top of the file:
 | `memory` | Yes | Array | One entry per `MEM` directive with `name` and `samples` |
 | `graph` | Yes | Object | `nodes` (string array) and `edges` (from/to pairs) |
 
-### 12.3 Common Mistakes
+### 13.3 Common Mistakes
 
 - `pots` array must have **exactly 3 entries** (pot0, pot1, pot2)
 - `memory` `samples` values must match the `MEM` sizes in the code
@@ -539,7 +914,7 @@ Metadata is embedded as structured comments at the top of the file:
 
 ---
 
-## 13. Simulation Fidelity Notes
+## 14. Simulation Fidelity Notes
 
 The SpinGPT simulator targets **gross correctness** — it is designed to catch functional bugs before hardware testing, not to produce bit-accurate hardware output.
 
@@ -564,56 +939,98 @@ The SpinGPT simulator targets **gross correctness** — it is designed to catch 
 
 ---
 
-## 14. Quick Reference Card
+## 15. Quick Reference Card
 
-```
-; --- Boilerplate skeleton for a mono effect ---
+```asm
+; --- Boilerplate skeleton for a mono-in stereo-out effect ---
 
 ;@fx v1
-;@fx { "version": "v1", "effectName": "My Effect", "io": "mono_mono",
+;@fx { "version": "v1", "effectName": "My Effect", "io": "mono_stereo",
 ;@fx   "pots": [{"id":"pot0","label":"Param1"},{"id":"pot1","label":"Param2"},{"id":"pot2","label":"Mix"}],
 ;@fx   "memory": [{"name":"buf","samples":8192}],
 ;@fx   "graph": {"nodes":["in","proc","out"],"edges":[{"from":"in","to":"proc"},{"from":"proc","to":"out"}]} }
+
+; My Effect
+; POT0 = Param1    POT1 = Param2    POT2 = Mix
 
 MEM buf 8192
 EQU param1  POT0
 EQU param2  POT1
 EQU mix     POT2
-EQU dry     ADCL
-EQU out     DACL
-EQU wet_reg REG0
+EQU mono    REG0
+EQU wet     REG1
+EQU temp    REG2
 
-; Skip init on all samples after first
+; --- Init (runs once) ---
 skp RUN, main
-
-; One-time init
 clr
 wra buf, 0.0
 
 main:
-; --- your algorithm here ---
+; --- Read input (sum to mono) ---
+rdax ADCL, 0.5
+rdax ADCR, 0.5
+wrax mono, 0
 
-; Write dry to delay, get wet signal
-ldax dry
+; --- Process ---
+ldax mono
 wra buf, 0.0
 rda buf#, 1.0
-wrax wet_reg, 0.0
+wrax wet, 0.0
 
-; Mix output
-ldax mix
-mulx wet_reg
-wrax REG1, 0.0
-sof -1.0, 1.0       ; 1 - mix
-mulx dry
-rdax REG1, 1.0
-wrax out, 0.0
+; --- Mix and output ---
+ldax mono              ; dry signal
+sof  -1.0, 0.0        ; negate
+rdax wet, 1.0          ; ACC = wet - dry
+mulx mix               ; ACC = mix * (wet - dry)
+rdax mono, 1.0         ; ACC = dry + mix*(wet-dry)
+wrax DACL, 1.0         ; left output (keep in ACC)
+wrax DACR, 0.0         ; right output
 ```
 
 ---
 
-## 15. Reference Sources
+## 16. Effect Recipe Index
+
+Quick reference for common effects and the patterns they combine. Use these as starting points:
+
+| Effect | Key Patterns | Typical Instruction Count |
+|---|---|---|
+| **Simple Delay** | MEM + wra/rda + feedback + mix | 15–25 |
+| **Ping-Pong Delay** | 2 delay lines, cross-feed L↔R | 25–40 |
+| **Chorus** | SIN LFO + CHO RDA (dual-tap interpolation) | 15–25 |
+| **Flanger** | Short delay + SIN LFO + feedback + mix | 20–35 |
+| **Plate Reverb** | 3–4 allpass diffusers + 4-stage ring + shelving EQ | 80–120 |
+| **Spring Reverb** | Cascaded chirp allpasses (6–37 stages) | 90–128 |
+| **Shimmer** | Reverb tank + RMP pitch shift (octave up) feeding back | 100–128 |
+| **Tremolo** | SIN/RMP LFO → multiply signal amplitude | 10–20 |
+| **Phaser** | Cascaded allpass filters with LFO-swept coefficients | 40–70 |
+| **Pitch Shift** | RMP LFO + CHO RDA/RPTR2 crossfade | 20–35 |
+| **Overdrive** | log/exp soft clip + tone filter | 25–40 |
+| **Auto-Wah** | Envelope detection + state-variable filter | 30–50 |
+| **Compressor** | Envelope detection + log/exp gain control | 30–50 |
+
+---
+
+## 17. Reference Sources and Acknowledgments
+
+### Primary References
 
 - **SPINAsm User Manual** (canonical): `http://www.spinsemi.com/Products/datasheets/spn1001-dev/SPINAsmUserManual.pdf`
 - **asfv1 assembler** (cross-platform Python assembler, compatible behavior): `https://github.com/ndf-zz/asfv1`
-- **SpinCAD Designer** (visual block editor, good for learning): Community tool
-- **SpinGPT** (this project): Web-based validator, simulator, and diagram tool
+- **SpinCAD Designer** (visual block editor, good for learning): `https://github.com/HolyCityAudio/SpinCAD-Designer`
+
+### Community Program Collections
+
+The patterns and conventions documented in this guide were informed by analysis of programs from these community repositories:
+
+- **Audiofab FV-1 VS Code Extension** — Professional VS Code extension with visual block programming, simulator, and hardware deployment for the FV-1. Includes reference implementations of reverb, delay, chorus, pitch shift, and shelving filter patterns. MIT License.
+  `https://github.com/audiofab/fv1-vscode`
+
+- **mstratman/fv1-programs** — Community-curated directory of 85+ FV-1 programs by authors including Spin Semi, Digital Larry (Holy City Audio), Don Stavely, David Rolo, Alex Lawrow, and many others. Covers reverbs, delays, modulation, pitch shifting, distortion, and utility effects.
+  `https://github.com/mstratman/fv1-programs`
+
+### SpinGPT
+
+- **SpinGPT** (this project): Web-based SpinASM IDE with compiler, FV-1 simulator, oscilloscope, FFT spectrum, delay memory visualization, and signal path diagrams.
+  `https://github.com/claypipkin/SpinGPT`
