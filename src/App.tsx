@@ -35,6 +35,7 @@ function App() {
   const [manifestCopied, setManifestCopied] = useState(false)
   const [guideExpanded, setGuideExpanded] = useState(false)
   const [userGuideExpanded, setUserGuideExpanded] = useState(false)
+  const [roadmapExpanded, setRoadmapExpanded] = useState(false)
 
   const {
     enabled: debugEnabled,
@@ -230,6 +231,36 @@ function App() {
               <ol start={3}>
                 <li><strong>Expect iteration.</strong> It will likely take multiple attempts for the LLM to produce a usable effect. When you get results back, look for lines marked <code>; TWEAK:</code> in the code — these are the values the LLM suggests you adjust to dial in the sound. Paste any errors from SpinIDE back into the LLM conversation to help it fix issues.</li>
               </ol>
+            </div>
+          )}
+        </div>
+
+        <div className="llm-guide">
+          <button
+            type="button"
+            className="llm-guide-toggle"
+            onClick={() => setRoadmapExpanded(!roadmapExpanded)}
+          >
+            <span>Roadmap</span>
+            <span>{roadmapExpanded ? '▼' : '▶'}</span>
+          </button>
+          {roadmapExpanded && (
+            <div className="llm-guide-body">
+              <p>Planned features and improvements for SpinIDE:</p>
+              <ul className="roadmap-list">
+                <li className="roadmap-item">
+                  <span className="roadmap-status roadmap-planned">Planned</span>
+                  <span>More guitar recording samples across various styles and pickup types</span>
+                </li>
+                <li className="roadmap-item">
+                  <span className="roadmap-status roadmap-planned">Planned</span>
+                  <span>Signal path diagram visualization</span>
+                </li>
+                <li className="roadmap-item">
+                  <span className="roadmap-status roadmap-planned">Planned</span>
+                  <span>Shareable URLs — link directly to a program to share effects with others</span>
+                </li>
+              </ul>
             </div>
           )}
         </div>

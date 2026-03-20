@@ -18,7 +18,16 @@ If the user is struggling to get good results, study additional real-world progr
 
 When generating SpinASM code, you MUST follow these rules:
 
-### 1.1 Output Format
+### 1.1 Research First — Find Similar Examples
+
+Before writing code from scratch, search the community program collection at:
+https://github.com/mstratman/fv1-programs/tree/master/docs/files
+
+Look for a `.spn` file that matches or is similar to what the user is requesting. If you find one, **fetch it and use it as a starting point** — adapt the existing code rather than writing from zero. This dramatically reduces trial and error and produces more reliable results.
+
+For example, if the user asks for a plate reverb, fetch `dattorro.spn`. If they want a delay with modulation, fetch `modulated-echo.spn`. If they want tremolo, fetch `stereo-tremolo.spn` or `tremolo-shapes.spn`. Draw inspiration from any example that is even partially similar to the request.
+
+### 1.2 Output Format
 
 - Always produce a **single, complete, runnable `.spn` program** — never code fragments or partial files
 - Present code in a **single fenced code block** (` ```asm `) so the user can copy-paste the entire program in one action. Never split the program across multiple code blocks
@@ -26,7 +35,7 @@ When generating SpinASM code, you MUST follow these rules:
 - Use the **skeleton template in Section 14** as your starting point for every program
 - Do **NOT** include `;@fx` metadata blocks — SpinIDE does not currently support them
 
-### 1.2 Pot Behavior Visualization (Required)
+### 1.3 Pot Behavior Visualization (Required)
 
 After presenting the code, you MUST include a **visual pot map** for every pot that the program uses. This shows the user exactly what each knob does across its range, using a progress bar visualization. This is critical — users need to understand what turning each knob will do before they load the program.
 
@@ -59,7 +68,7 @@ POT2 — Mix
 - If a pot has a non-linear response (squared curve, scaled range), describe what the user actually hears, not the internal coefficient values
 - If pots interact (e.g., feedback + delay time), mention the interaction in the description
 
-### 1.3 Commenting Policy (Critical)
+### 1.4 Commenting Policy (Critical)
 
 Assume the user has **zero SpinASM background**. They are likely a guitar pedal builder or musician, not a DSP engineer. Every program you generate must be understandable by someone who has never seen assembly language before.
 
@@ -100,7 +109,7 @@ Assume the user has **zero SpinASM background**. They are likely a guitar pedal 
    ; POT2 (Knob 3) = Mix — full left = dry only, full right = wet only
    ```
 
-### 1.4 Validation Before Presenting Code
+### 1.5 Validation Before Presenting Code
 
 Before presenting your program to the user, mentally verify:
 - Total instruction count is **<= 128** (count every instruction line, excluding comments, directives, and labels)
@@ -111,7 +120,7 @@ Before presenting your program to the user, mentally verify:
 
 If the user's request would exceed 128 instructions, simplify the design and explain what tradeoffs you made. Do not silently exceed the limit.
 
-### 1.5 Common LLM Mistakes to Avoid
+### 1.6 Common LLM Mistakes to Avoid
 
 These are errors that AI models frequently make when generating SpinASM code:
 

@@ -1014,6 +1014,13 @@ body {
   vertical-align: middle;
 }
 
+.roadmap-list { list-style: none; margin: 0; padding: 0; }
+.roadmap-item { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: 0.82rem; line-height: 1.5; }
+.roadmap-status { flex-shrink: 0; font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; }
+.roadmap-planned { background: rgba(100, 140, 220, 0.15); color: var(--accent); }
+.roadmap-in-progress { background: rgba(220, 180, 60, 0.15); color: var(--warning); }
+.roadmap-done { background: rgba(80, 180, 100, 0.15); color: #50b464; }
+
 .llm-guide-prompt-line {
   display: flex;
   align-items: stretch;
