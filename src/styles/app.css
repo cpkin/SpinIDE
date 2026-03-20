@@ -886,11 +886,21 @@ body {
 .modal-header { padding: 16px 16px 10px; border-bottom: 1px solid var(--border); }
 .modal-header h2 { margin: 0; font-size: 1.2rem; color: var(--ink); }
 .modal-body { padding: 16px; }
-.fidelity-intro { margin: 0 0 10px; font-size: 0.9rem; line-height: 1.5; }
-.fidelity-description { background: var(--bg-surface); border-radius: 6px; padding: 10px; margin: 10px 0; border: 1px solid var(--border); }
-.fidelity-description pre { margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; line-height: 1.6; white-space: pre-wrap; color: var(--ink); }
-.fidelity-footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-.fidelity-disclaimer { margin: 0; font-size: 0.85rem; color: var(--warning); font-weight: 500; }
+.fidelity-intro { margin: 0 0 12px; font-size: 0.9rem; line-height: 1.6; color: var(--ink); }
+.manifesto-quote { margin: 16px 0; padding: 12px 16px; background: var(--bg-surface); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; }
+.manifesto-quote p { margin: 0 0 8px; font-size: 0.78rem; line-height: 1.6; color: var(--ink); font-style: italic; }
+.manifesto-quote footer { font-size: 0.78rem; color: var(--ink-muted); }
+.manifesto-acknowledgements { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.manifesto-acknowledgements h3 { margin: 0 0 8px; font-size: 0.9rem; color: var(--ink); }
+.manifesto-acknowledgements ul { margin: 0; padding-left: 18px; }
+.manifesto-acknowledgements li { margin-bottom: 4px; font-size: 0.82rem; line-height: 1.5; }
+.manifesto-acknowledgements a { color: var(--accent); text-decoration: none; }
+.manifesto-acknowledgements a:hover { text-decoration: underline; }
+.manifesto-technical { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.manifesto-technical h3 { margin: 0 0 8px; font-size: 0.9rem; color: var(--ink); }
+.manifesto-technical p { margin: 0 0 6px; font-size: 0.82rem; color: var(--ink-muted); }
+.manifesto-technical ul { margin: 0; padding-left: 18px; }
+.manifesto-technical li { margin-bottom: 4px; font-size: 0.78rem; line-height: 1.5; color: var(--ink-muted); }
 .modal-actions { padding: 10px 16px 16px; display: flex; justify-content: flex-end; }
 
 /* ================================================
