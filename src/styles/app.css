@@ -1014,6 +1014,43 @@ body {
   vertical-align: middle;
 }
 
+.llm-guide-prompt-line {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 6px 0 10px;
+  overflow: hidden;
+}
+.llm-guide-prompt-text {
+  flex: 1;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--ink);
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: block;
+}
+.llm-guide-copy-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  background: var(--bg-surface);
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--ink-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.llm-guide-copy-btn:hover { background: var(--border); color: var(--ink); }
+.llm-guide-copy-btn-active { color: var(--accent); }
+
 /* ================================================
    RESPONSIVE
    ================================================ */

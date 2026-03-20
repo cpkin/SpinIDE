@@ -121,7 +121,7 @@ function App() {
   // LLM manifest copy
   const handleCopyManifest = async () => {
     try {
-      const manifestUrl = 'https://raw.githubusercontent.com/claypipkin/SpinIDE/main/docs/fv1-development-guide.md'
+      const manifestUrl = 'https://raw.githubusercontent.com/cpkin/SpinIDE/main/docs/fv1-development-guide.md'
       const prompt = `Please read and internalize the FV-1 SpinASM development guide at:\n${manifestUrl}\n\nThis guide covers the FV-1 DSP architecture, SpinASM instruction set, delay RAM, LFOs, and programming patterns. Use it as reference when helping me write FV-1 programs.`
       await navigator.clipboard.writeText(prompt)
       setManifestCopied(true)
@@ -129,7 +129,7 @@ function App() {
     } catch {
       // Fallback: try to copy just the URL
       try {
-        await navigator.clipboard.writeText('https://raw.githubusercontent.com/claypipkin/SpinIDE/main/docs/fv1-development-guide.md')
+        await navigator.clipboard.writeText('https://raw.githubusercontent.com/cpkin/SpinIDE/main/docs/fv1-development-guide.md')
         setManifestCopied(true)
         setTimeout(() => setManifestCopied(false), 3000)
       } catch {
@@ -208,23 +208,20 @@ function App() {
                 The LLM needs a reference guide so it understands the FV-1 instruction set and hardware constraints.
               </p>
               <ol>
-                <li>
-                  Click <strong>Copy Guide Prompt</strong> to copy a ready-made prompt to your clipboard.
-                  <button
-                    type="button"
-                    className={`toolbar-btn toolbar-btn-primary llm-guide-inline-btn ${manifestCopied ? 'toolbar-btn-active' : ''}`}
-                    onClick={handleCopyManifest}
-                  >
-                    {manifestCopied ? 'Copied!' : 'Copy Guide Prompt'}
-                  </button>
-                </li>
+                <li>Copy the prompt below and paste it into your LLM conversation. It asks the LLM to read the FV-1 development guide hosted on GitHub. Most LLMs can fetch and parse this URL directly.</li>
               </ol>
-              <div className="llm-guide-example">
-                <code>Please read and internalize the FV-1 SpinASM development guide at: https://raw.githubusercontent.com/claypipkin/SpinIDE/main/docs/fv1-development-guide.md</code>
+              <div className="llm-guide-prompt-line">
+                <code className="llm-guide-prompt-text">Please read and internalize the FV-1 SpinASM development guide at: https://raw.githubusercontent.com/cpkin/SpinIDE/main/docs/fv1-development-guide.md{'\n\n'}This guide covers the FV-1 DSP architecture, SpinASM instruction set, delay RAM, LFOs, and programming patterns. Use it as reference when helping me write FV-1 programs.</code>
+                <button
+                  type="button"
+                  className={`llm-guide-copy-btn ${manifestCopied ? 'llm-guide-copy-btn-active' : ''}`}
+                  onClick={handleCopyManifest}
+                  title="Copy prompt to clipboard"
+                >
+                  {manifestCopied ? '✓' : '⧉'}
+                </button>
               </div>
               <ol start={2}>
-                <li>This guide prompt covers the FV-1 DSP architecture, SpinASM instruction set, delay RAM, LFOs, and programming patterns. Use it as reference when helping me write FV-1 programs.</li>
-                <li>Paste it into your LLM conversation. The prompt asks the LLM to read the FV-1 development guide hosted on GitHub. Most LLMs can fetch and parse this URL directly.</li>
                 <li>Then describe what you want your pedal to do. Be specific about the effect type and how it should sound. For example:</li>
               </ol>
               <div className="llm-guide-example">

@@ -4,9 +4,9 @@ This is the canonical reference for developing FV-1 SpinASM programs, intended f
 
 **Before generating any code, study these gold-standard example programs.** Your output should match their style, structure, and comment density:
 
-- **[Ping-Pong Delay](https://raw.githubusercontent.com/claypipkin/SpinIDE/main/docs/examples/gold-pingpong-delay.spn)** — stereo bouncing delay with pot smoothing, variable delay time, and crossfeed feedback
-- **[Dattorro Plate Reverb](https://raw.githubusercontent.com/claypipkin/SpinIDE/main/docs/examples/gold-dattorro-reverb.spn)** — full Dattorro algorithm with input diffusion, LFO-modulated tank, damping, and multi-tap stereo output
-- **[Dual-Rate Chorus](https://raw.githubusercontent.com/claypipkin/SpinIDE/main/docs/examples/gold-dual-chorus.spn)** — thick 8-voice chorus using two independent LFOs with sin/cos/inverted phase taps
+- **[Ping-Pong Delay](https://raw.githubusercontent.com/cpkin/SpinIDE/main/docs/examples/gold-pingpong-delay.spn)** — stereo bouncing delay with pot smoothing, variable delay time, and crossfeed feedback
+- **[Dattorro Plate Reverb](https://raw.githubusercontent.com/cpkin/SpinIDE/main/docs/examples/gold-dattorro-reverb.spn)** — full Dattorro algorithm with input diffusion, LFO-modulated tank, damping, and multi-tap stereo output
+- **[Dual-Rate Chorus](https://raw.githubusercontent.com/cpkin/SpinIDE/main/docs/examples/gold-dual-chorus.spn)** — thick 8-voice chorus using two independent LFOs with sin/cos/inverted phase taps
 
 These examples are adapted from the [mstratman/fv1-programs](https://github.com/mstratman/fv1-programs) community collection and enhanced with the commenting and metadata standards described below.
 
