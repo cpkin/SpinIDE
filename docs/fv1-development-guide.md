@@ -11,11 +11,45 @@ When generating SpinASM code, you MUST follow these rules:
 ### 1.1 Output Format
 
 - Always produce a **single, complete, runnable `.spn` program** — never code fragments or partial files
+- Present code in a **single fenced code block** (` ```asm `) so the user can copy-paste the entire program in one action. Never split the program across multiple code blocks
 - Always include the **`;@fx` metadata block** at the top (see Section 13) so the program works with SpinIDE's signal path diagram, pot labels, and UI features
 - Always follow the **program structure order** from Section 2 (metadata, header, MEM, EQU, init, pots, input, processing, output)
 - Use the **skeleton template in Section 15** as your starting point for every program
 
-### 1.2 Commenting Policy (Critical)
+### 1.2 Pot Behavior Visualization (Required)
+
+After presenting the code, you MUST include a **visual pot map** for every pot that the program uses. This shows the user exactly what each knob does across its range, using a progress bar visualization. This is critical — users need to understand what turning each knob will do before they load the program.
+
+**Format — use this exact style for each pot:**
+
+```
+POT0 — Decay Time
+  0%  ░░░░░░░░░░  Very short — room-sized reflections
+ 25%  ▓▓▓░░░░░░░  Small hall — natural decay
+ 50%  ▓▓▓▓▓░░░░░  Medium hall — lush sustain
+ 75%  ▓▓▓▓▓▓▓▓░░  Large cathedral — long wash
+100%  ▓▓▓▓▓▓▓▓▓▓  Near-infinite — frozen shimmer
+
+POT1 — Tone (Damping)
+  0%  ░░░░░░░░░░  Very dark — muffled, warm
+ 25%  ▓▓▓░░░░░░░  Warm — rolled-off highs
+ 50%  ▓▓▓▓▓░░░░░  Neutral — balanced decay
+ 75%  ▓▓▓▓▓▓▓▓░░  Bright — airy, open
+100%  ▓▓▓▓▓▓▓▓▓▓  Full brightness — no damping
+
+POT2 — Mix
+  0%  ░░░░░░░░░░  Fully dry — no effect
+ 50%  ▓▓▓▓▓░░░░░  Equal blend
+100%  ▓▓▓▓▓▓▓▓▓▓  Fully wet — effect only
+```
+
+**Rules:**
+- Include 4–6 positions per pot (at minimum: 0%, 50%, 100%)
+- Describe the **sonic result** at each position, not the math — use language a musician understands
+- If a pot has a non-linear response (squared curve, scaled range), describe what the user actually hears, not the internal coefficient values
+- If pots interact (e.g., feedback + delay time), mention the interaction in the description
+
+### 1.3 Commenting Policy (Critical)
 
 Assume the user has **zero SpinASM background**. They are likely a guitar pedal builder or musician, not a DSP engineer. Every program you generate must be understandable by someone who has never seen assembly language before.
 
@@ -56,7 +90,7 @@ Assume the user has **zero SpinASM background**. They are likely a guitar pedal 
    ; POT2 (Knob 3) = Mix — full left = dry only, full right = wet only
    ```
 
-### 1.3 Validation Before Presenting Code
+### 1.4 Validation Before Presenting Code
 
 Before presenting your program to the user, mentally verify:
 - Total instruction count is **<= 128** (count every instruction line, excluding comments, directives, and labels)
@@ -68,7 +102,7 @@ Before presenting your program to the user, mentally verify:
 
 If the user's request would exceed 128 instructions, simplify the design and explain what tradeoffs you made. Do not silently exceed the limit.
 
-### 1.4 Common LLM Mistakes to Avoid
+### 1.5 Common LLM Mistakes to Avoid
 
 These are errors that AI models frequently make when generating SpinASM code:
 
