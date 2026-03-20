@@ -1,0 +1,146 @@
+;@fx v1
+;@fx {
+;@fx   "version": "v1",
+;@fx   "effectName": "Dual-Rate Chorus",
+;@fx   "io": "mono_stereo",
+;@fx   "pots": [
+;@fx     {"id": "pot0", "label": "Chorus Level"},
+;@fx     {"id": "pot1", "label": "Rate A"},
+;@fx     {"id": "pot2", "label": "Rate B"}
+;@fx   ],
+;@fx   "memory": [
+;@fx     {"name": "chodel", "samples": 4096}
+;@fx   ],
+;@fx   "graph": {
+;@fx     "nodes": ["input", "chorusA", "chorusB", "mix", "outputL"],
+;@fx     "edges": [
+;@fx       {"from": "input", "to": "chorusA"},
+;@fx       {"from": "input", "to": "chorusB"},
+;@fx       {"from": "chorusA", "to": "mix"},
+;@fx       {"from": "chorusB", "to": "mix"},
+;@fx       {"from": "input", "to": "mix"},
+;@fx       {"from": "mix", "to": "outputL"}
+;@fx     ]
+;@fx   }
+;@fx }
+
+; =====================================================================
+; Dual-Rate Chorus
+; Based on dual-rate chorus from the SpinSemi forum
+; Source: mstratman/fv1-programs collection
+;
+; A rich chorus effect that uses TWO independent LFOs at different
+; speeds, each reading from 4 different tap points in the delay.
+; This creates 8 total chorus voices for a very thick, shimmery sound
+; without any obvious "warble."
+;
+; POT0 (Knob 1) = Chorus Level — how much chorus is mixed in
+; POT1 (Knob 2) = Rate A — speed of the second chorus layer
+;                  (turn right for faster shimmer)
+; POT2 (Knob 3) = Rate B — speed of the first chorus layer
+;                  (turn right for faster warble)
+;
+; TIP: Set both rate knobs to different positions for the richest sound.
+;      Setting them the same creates a simpler, more obvious chorus.
+; =====================================================================
+
+; ===== DELAY MEMORY =====
+; Single delay buffer shared by both LFOs — all chorus taps read from
+; different points in this buffer
+
+MEM chodel  4096              ; chorus delay line (~125ms — plenty of room for modulation)
+
+; ===== REGISTERS =====
+
+EQU mono    REG0              ; mono input sum (L+R mixed together)
+EQU chorout REG1              ; final chorus output (sum of all 8 taps)
+
+; ===== INITIALIZATION (runs once at power-on) =====
+; Set up two sine LFOs — the rates will be overwritten by the pots,
+; but the amplitude (depth) is set here and stays fixed.
+
+skp RUN, START
+wlds SIN0, 0, 800            ; TWEAK: chorus depth for layer A (lower = subtler pitch bend, try 400-1200)
+wlds SIN1, 0, 1200           ; TWEAK: chorus depth for layer B (higher = thicker, more obvious chorus)
+
+START:
+
+; ===== INPUT STAGE =====
+; Sum stereo input to mono and write into the chorus delay line
+
+rdax ADCL, 0.5               ; read left input at half volume (headroom for mixing)
+rdax ADCR, 0.5               ; add right input at half volume
+wra  chodel, 1               ; write mono sum to head of chorus delay, keep in ACC
+wrax mono, 0.5               ; store dry mono signal at half level, clear ACC
+
+; ===== READ KNOBS =====
+
+; --- POT2: Rate B (controls SIN0, the first chorus layer) ---
+rdax POT2, 1                  ; read rate knob
+mulx POT2                     ; square it for a nicer taper (fine control at low settings)
+sof  0.02, 0.01              ; TWEAK: scale to ~0.3Hz to ~1Hz range (lower sof values = slower max rate)
+wrax SIN0_RATE, 0             ; set LFO speed for chorus layer A
+
+; --- POT1: Rate A (controls SIN1, the second chorus layer) ---
+rdax POT1, 1                  ; read rate knob
+mulx POT1                     ; square for taper
+sof  0.04, 0.01              ; TWEAK: scale to ~0.3Hz to ~1.7Hz range (slightly faster range than layer A)
+wrax SIN1_RATE, 0             ; set LFO speed for chorus layer B
+
+; ===== CORE CHORUS PROCESSING =====
+; Each LFO reads from 4 different tap positions using sin, cos,
+; inverted sin, and inverted cos phases. This creates 4 decorrelated
+; voices per LFO = 8 total voices for a very thick chorus.
+;
+; The CHO RDA pairs (two lines each) do interpolated reads for smooth,
+; click-free pitch modulation. The COMPA flag inverts the LFO direction,
+; and COS gives a 90-degree phase offset from SIN.
+
+; --- Layer A: 4 voices from SIN0 ---
+
+; Voice 1: sine phase, reading from offset +1400
+cho RDA, SIN0, SIN|REG|COMPC, chodel+1400  ; read with interpolation coefficient
+cho RDA, SIN0, SIN,            chodel+1401  ; read adjacent sample for interpolation
+
+; Voice 2: cosine phase (90 degrees offset), reading from offset +1200
+cho RDA, SIN0, COS|REG|COMPC, chodel+1200
+cho RDA, SIN0, COS,            chodel+1201
+
+; Voice 3: inverted sine direction, reading from offset +1600
+cho RDA, SIN0, SIN|REG|COMPA, chodel+1600       ; COMPA = inverted address offset
+cho RDA, SIN0, SIN|COMPC|COMPA, chodel+1601
+
+; Voice 4: inverted cosine direction, reading from offset +1200
+cho RDA, SIN0, COS|REG|COMPA, chodel+1200
+cho RDA, SIN0, COS|COMPC|COMPA, chodel+1201
+
+; --- Layer B: 4 voices from SIN1 ---
+
+; Voice 5: sine phase, offset +900
+cho RDA, SIN1, SIN|REG|COMPC, chodel+900
+cho RDA, SIN1, SIN,            chodel+901
+
+; Voice 6: cosine phase, offset +1100
+cho RDA, SIN1, COS|REG|COMPC, chodel+1100
+cho RDA, SIN1, COS,            chodel+1101
+
+; Voice 7: inverted sine, offset +700
+cho RDA, SIN1, SIN|REG|COMPA, chodel+700
+cho RDA, SIN1, SIN|COMPC|COMPA, chodel+701
+
+; Voice 8: inverted cosine, offset +1600
+cho RDA, SIN1, COS|REG|COMPA, chodel+1600
+cho RDA, SIN1, COS|COMPC|COMPA, chodel+1601
+
+; All 8 voices are now summed in ACC — scale by the chorus level knob
+mulx POT0                     ; scale total chorus by level knob
+wrax chorout, 0               ; store chorus output
+
+; ===== OUTPUT MIXING =====
+; Add the dry signal and the chorus together for the final output.
+; The dry signal passes through at a fixed level, and the chorus level
+; knob (POT0) controls how much shimmer is added on top.
+
+rdax mono, 1                  ; load dry mono signal
+rdax chorout, 0.5             ; add chorus at half level (prevents clipping with 8 voices summed)
+wrax DACL, 0                  ; send to left output

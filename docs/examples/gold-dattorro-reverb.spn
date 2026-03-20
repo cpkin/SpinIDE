@@ -1,0 +1,295 @@
+;@fx v1
+;@fx {
+;@fx   "version": "v1",
+;@fx   "effectName": "Dattorro Plate Reverb",
+;@fx   "io": "stereo_stereo",
+;@fx   "pots": [
+;@fx     {"id": "pot0", "label": "Reverb Level"},
+;@fx     {"id": "pot1", "label": "Decay Time"},
+;@fx     {"id": "pot2", "label": "Damping"}
+;@fx   ],
+;@fx   "memory": [
+;@fx     {"name": "predelay", "samples": 655},
+;@fx     {"name": "ap13_14", "samples": 156},
+;@fx     {"name": "ap19_20", "samples": 117},
+;@fx     {"name": "ap15_16", "samples": 417},
+;@fx     {"name": "ap21_22", "samples": 305},
+;@fx     {"name": "ap23_24", "samples": 748},
+;@fx     {"name": "ap46_48", "samples": 1008},
+;@fx     {"name": "del24_30", "samples": 4903},
+;@fx     {"name": "del48_54", "samples": 4643},
+;@fx     {"name": "ap31_33", "samples": 1990},
+;@fx     {"name": "ap55_59", "samples": 2932},
+;@fx     {"name": "del33_39", "samples": 4096},
+;@fx     {"name": "del59_63", "samples": 3483}
+;@fx   ],
+;@fx   "graph": {
+;@fx     "nodes": ["input", "predelay", "diffusion", "tankL", "tankR", "outputL", "outputR"],
+;@fx     "edges": [
+;@fx       {"from": "input", "to": "predelay"},
+;@fx       {"from": "predelay", "to": "diffusion"},
+;@fx       {"from": "diffusion", "to": "tankL"},
+;@fx       {"from": "diffusion", "to": "tankR"},
+;@fx       {"from": "tankL", "to": "tankR"},
+;@fx       {"from": "tankR", "to": "tankL"},
+;@fx       {"from": "tankL", "to": "outputL"},
+;@fx       {"from": "tankR", "to": "outputR"}
+;@fx     ]
+;@fx   }
+;@fx }
+
+; =====================================================================
+; Dattorro Plate Reverb
+; Based on Jon Dattorro's "Effect Design Part 1" paper (CCRMA/Stanford)
+; Coded by mdroberts1243, adapted from mstratman/fv1-programs collection
+;
+; A high-quality plate reverb algorithm. The signal flows through a
+; pre-delay, then four input diffusion stages (allpass filters that
+; "smear" the echoes into a smooth wash), and finally into a two-sided
+; feedback tank with LFO modulation for a lush, non-metallic sound.
+;
+; POT0 (Knob 1) = Reverb Level — how loud the reverb is in the mix
+; POT1 (Knob 2) = Decay Time — how long the reverb tail lasts
+;                  (fully clockwise = infinite sustain / freeze)
+; POT2 (Knob 3) = Damping — high-frequency loss in the reverb tail
+;                  (turn UP for darker, warmer sound)
+; =====================================================================
+
+; ===== ALGORITHM CONSTANTS =====
+; These come from the Dattorro paper — they define the character of the
+; reverb. You can tweak them, but the defaults sound great as-is.
+
+EQU decay_diffusion_1  0.70  ; TWEAK: tank allpass diffusion (0.5=sparse, 0.8=dense — keep below 0.8)
+EQU input_diffusion_1  0.75  ; TWEAK: input smearing amount (0.6=less diffuse, 0.8=very smooth)
+EQU input_diffusion_2  0.625 ; TWEAK: second-stage input smearing (usually a bit less than stage 1)
+
+; Filter coefficient for input bandwidth limiting
+EQU k1_2kHz    0.68148       ; lowpass coefficient for ~2kHz cutoff
+EQU bandwidth  1-k1_2kHz     ; derived: controls how bright the input to the reverb is
+
+EQU excursion  8             ; LFO modulation depth in samples (keeps the reverb alive-sounding)
+
+; ===== DELAY MEMORY =====
+; All buffer sizes are scaled from Dattorro's paper (originally 29761 Hz)
+; up to the FV-1's 32768 Hz sample rate (x1.101 scaling factor).
+
+MEM predelay   655           ; TWEAK: pre-delay before reverb starts (~20ms. Try 3802 for ~116ms)
+
+; Input diffusion allpasses — these smear the initial transient into a wash
+MEM ap13_14    156           ; input allpass 1 (coeff: input_diffusion_1)
+MEM ap19_20    117           ; input allpass 2 (coeff: input_diffusion_1)
+MEM ap15_16    417           ; input allpass 3 (coeff: input_diffusion_2)
+MEM ap21_22    305           ; input allpass 4 (coeff: input_diffusion_2)
+
+; Tank allpasses — these are modulated by LFOs to prevent metallic ringing
+MEM ap23_24    740+excursion ; left tank allpass (coeff: decay_diffusion_1)
+MEM ap46_48    1000+excursion; right tank allpass (coeff: decay_diffusion_1)
+
+; Tank delay lines — these create the actual reverb tail length
+MEM del24_30   4903          ; left tank delay A
+MEM del48_54   4643          ; right tank delay A
+
+; Tank feedback allpasses — coefficient controlled by decay knob
+MEM ap31_33    1982+excursion; left feedback allpass
+MEM ap55_59    2924+excursion; right feedback allpass
+
+; Tank delay lines B
+MEM del33_39   4096          ; left tank delay B
+MEM del59_63   3483          ; right tank delay B
+
+; ===== REGISTERS =====
+
+EQU krl                REG0  ; reverb output level (from POT0)
+EQU decay              REG1  ; reverb decay time (from POT1)
+EQU decay_diffusion_2  REG2  ; derived from decay — controls feedback allpass character
+EQU damping            REG3  ; high-freq damping coefficient (from POT2)
+EQU one_minus_dmpg     REG4  ; complement of damping (1 - damping)
+EQU lp_inp             REG5  ; input bandwidth lowpass filter state
+EQU lp30_31            REG6  ; left tank lowpass filter state
+EQU lp54_55            REG7  ; right tank lowpass filter state
+EQU mono               REG8  ; mono input signal (sum of L+R)
+EQU diffuse_in         REG9  ; output of the 4 input diffusion allpasses
+EQU temp               REG10 ; scratch register for allpass calculations
+EQU temp2              REG11 ; second scratch register
+
+; ===== INITIALIZATION (runs once at power-on) =====
+; Set up two sine LFOs to modulate the tank allpasses — this prevents
+; the reverb from sounding metallic or "ringy"
+
+skp RUN, 2
+wlds SIN0, 27, excursion     ; ~1 Hz sine LFO for left tank modulation
+wlds SIN1, 23, excursion     ; ~0.9 Hz sine LFO for right tank (slightly different = decorrelated)
+
+; ===== READ KNOBS =====
+
+; --- POT0: Reverb level ---
+rdax POT0, 1                  ; read reverb level knob
+mulx POT0                     ; square it for smoother taper (subtle at low settings, louder at high)
+wrax krl, 0                   ; store for output mixing later
+
+; --- POT1: Decay time ---
+rdax POT1, 1                  ; read decay knob (0 = short, 1 = infinite sustain)
+wrax decay, 1                 ; store decay coefficient, keep in ACC
+
+; Derive decay_diffusion_2 from the decay knob
+; Must stay between 0.25 and 0.50 for stability
+sof  1.0, -0.35              ; check if we'd exceed ceiling of 0.50
+skp  NEG, 1                  ; if negative, we're fine — skip the clamp
+clr                           ; clamp: set to 0.35 (will become 0.50 below)
+sof  1.0, 0.35               ; restore value
+sof  1.0, -0.10              ; check if we'd go below floor of 0.25
+skp  GEZ, 1                  ; if positive, we're fine — skip the clamp
+clr                           ; clamp: set to 0 (will become 0.25 below)
+sof  1.0, 0.25               ; restore + add offset = final value in [0.25, 0.50]
+wrax decay_diffusion_2, 0    ; store tank feedback allpass coefficient
+
+; --- POT2: Damping (high-frequency loss in the tank) ---
+rdax POT2, 1                  ; read damping knob (0=bright, 1=very dark)
+wrax damping, -1              ; store damping, negate in ACC
+sof  1, 0.9990234375         ; compute (1 - damping) — the complement for the filter
+wrax one_minus_dmpg, 0       ; store complement
+
+; ===== INPUT STAGE =====
+; Sum stereo input to mono at half volume to prevent clipping
+
+rdax ADCL, 0.5               ; left input at half volume
+rdax ADCR, 0.5               ; add right input at half volume
+wrax mono, 1                 ; store mono sum, keep in ACC for pre-delay
+
+; ===== PRE-DELAY =====
+; A short delay before the reverb starts — adds a sense of space/distance
+
+wra  predelay, 0             ; write input to pre-delay buffer
+
+; ===== INPUT BANDWIDTH FILTER =====
+; Gentle lowpass on the reverb input — removes harshness before diffusion
+
+rda  predelay#, bandwidth    ; read end of pre-delay, apply bandwidth filter
+rdax lp_inp, 1-bandwidth     ; one-pole lowpass: blend with previous state
+wrax lp_inp, 1               ; store filter state, keep filtered signal in ACC
+
+; ===== INPUT DIFFUSION =====
+; Four allpass filters in series that smear the input into a smooth wash.
+; Without these, you'd hear distinct echo taps instead of a smooth reverb.
+
+rda  ap13_14#, -input_diffusion_1  ; allpass 1 — read end, negative coefficient
+wrap ap13_14,   input_diffusion_1  ; write to start, positive coefficient
+rda  ap19_20#, -input_diffusion_1  ; allpass 2
+wrap ap19_20,   input_diffusion_1
+rda  ap15_16#, -input_diffusion_2  ; allpass 3 (slightly different coefficient)
+wrap ap15_16,   input_diffusion_2
+rda  ap21_22#, -input_diffusion_2  ; allpass 4
+wrap ap21_22,   input_diffusion_2
+wrax diffuse_in, 0                 ; store the fully-diffused input signal
+
+; ===== REVERB TANK — LEFT SIDE =====
+; The tank is a two-sided feedback loop. Signal flows: left -> right -> left...
+; Each side has: allpass (LFO-modulated) -> delay -> lowpass -> allpass -> delay
+
+rda  del59_63#, 1             ; read end of right-side delay (feedback from other side)
+mulx decay                    ; scale by decay time (longer decay = more feedback)
+rdax diffuse_in, 1            ; add the diffused input
+wrax temp, 0                  ; save for allpass calculation
+
+; --- LFO-modulated allpass (prevents metallic ringing) ---
+cho  RDA, SIN0, SIN|REG|COMPC, ap23_24#-excursion-1  ; interpolated LFO read
+cho  RDA, SIN0, SIN,           ap23_24#-excursion      ; second tap for interpolation
+wrax temp2, decay_diffusion_1 ; store modulated tail, apply coefficient
+rdax temp, 1                  ; add input
+wra  ap23_24, -decay_diffusion_1  ; write to allpass, negative coefficient
+rdax temp2, 1                 ; add back the modulated tail
+
+wra  del24_30, 0              ; write to left delay line A
+rda  del24_30#, 1             ; read end of delay (oldest sample)
+
+; --- Damping lowpass (high frequencies decay faster, like a real room) ---
+mulx one_minus_dmpg           ; multiply by (1 - damping)
+wrax temp, 0                  ; store
+rdax lp30_31, 1               ; read filter state
+mulx damping                  ; multiply by damping coefficient
+rdax temp, 1                  ; add to get new filter output
+wrax lp30_31, 1               ; store filter state, keep in ACC
+
+mulx decay                    ; apply decay to the filtered signal
+wrax temp, 0                  ; save for feedback allpass
+
+; --- Feedback allpass (variable coefficient from decay knob) ---
+cho  RDA, SIN1, COS|REG|COMPC, ap31_33#-excursion-1  ; LFO-modulated read (cosine for decorrelation)
+cho  RDA, SIN1, COS,           ap31_33#-excursion
+wrax temp2, -1                ; store and negate
+mulx decay_diffusion_2        ; apply variable coefficient
+rdax temp, 1                  ; add input
+wra  ap31_33, 1               ; write to allpass
+mulx decay_diffusion_2        ; apply coefficient again
+rdax temp2, 1                 ; add back modulated tail
+
+wra  del33_39, 0              ; write to left delay line B
+rda  del33_39#, 1             ; read end (feeds into right side)
+
+; ===== REVERB TANK — RIGHT SIDE =====
+; Mirror of the left side, but with different delay lengths and LFO phases
+; for a natural stereo image
+
+mulx decay                    ; scale by decay
+rdax diffuse_in, 1            ; add diffused input
+wrax temp, 0
+
+; --- LFO-modulated allpass (cosine phase = decorrelated from left side) ---
+cho  RDA, SIN0, COS|REG|COMPC, ap46_48#-excursion-1
+cho  RDA, SIN0, COS,           ap46_48#-excursion
+wrax temp2, decay_diffusion_1
+rdax temp, 1
+wra  ap46_48, -decay_diffusion_1
+rdax temp2, 1
+
+wra  del48_54, 0              ; write to right delay line A
+rda  del48_54#, 1
+
+; --- Damping lowpass (same as left side) ---
+mulx one_minus_dmpg
+wrax temp, 0
+rdax lp54_55, 1
+mulx damping
+rdax temp, 1
+wrax lp54_55, 1
+
+mulx decay
+wrax temp, 0
+
+; --- Feedback allpass (sine phase for decorrelation) ---
+cho  RDA, SIN1, SIN|REG|COMPC, ap55_59#-excursion-1
+cho  RDA, SIN1, SIN,           ap55_59#-excursion
+wrax temp2, -1
+mulx decay_diffusion_2
+rdax temp, 1
+wra  ap55_59, 1
+mulx decay_diffusion_2
+rdax temp2, 1
+
+wra  del59_63, 0              ; write to right delay line B (feeds back to left side)
+
+; ===== STEREO OUTPUT =====
+; Tap multiple points in the tank to create a wide, natural stereo image.
+; Different tap positions on each side = decorrelated L/R for spaciousness.
+
+; --- Left output: 7 taps mixed together ---
+rda  del48_54+292, 0.6        ; tap from right delay A (early reflection)
+rda  del48_54+3274, 0.6       ; tap from right delay A (late reflection)
+rda  ap55_59+2107, -0.6       ; tap from right allpass (inverted for width)
+rda  del59_63+2198, 0.6       ; tap from right delay B
+rda  del24_30+2192, -0.6      ; tap from left delay A (inverted)
+rda  ap31_33+205, -0.6        ; tap from left allpass (inverted)
+rda  del33_39+1174, -0.6      ; tap from left delay B (inverted)
+mulx krl                      ; scale by reverb level knob (POT0)
+wrax DACL, 0                  ; send to left output
+
+; --- Right output: 7 different taps ---
+rda  del24_30+389, 0.6
+rda  del24_30+3993, 0.6
+rda  ap31_33+1352, -0.6
+rda  del33_39+2943, 0.6
+rda  del48_54+2325, -0.6
+rda  ap55_59+369, -0.6
+rda  del59_63+133, -0.6
+mulx krl                      ; scale by reverb level knob (POT0)
+wrax DACR, 0                  ; send to right output

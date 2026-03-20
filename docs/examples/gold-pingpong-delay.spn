@@ -1,0 +1,136 @@
+;@fx v1
+;@fx {
+;@fx   "version": "v1",
+;@fx   "effectName": "Ping-Pong Delay",
+;@fx   "io": "stereo_stereo",
+;@fx   "pots": [
+;@fx     {"id": "pot0", "label": "Ping Time"},
+;@fx     {"id": "pot1", "label": "Pong Time"},
+;@fx     {"id": "pot2", "label": "Feedback"}
+;@fx   ],
+;@fx   "memory": [
+;@fx     {"name": "ping", "samples": 16383},
+;@fx     {"name": "pong", "samples": 16383}
+;@fx   ],
+;@fx   "graph": {
+;@fx     "nodes": ["inputL", "inputR", "ping", "pong", "outputL", "outputR"],
+;@fx     "edges": [
+;@fx       {"from": "inputL", "to": "ping"},
+;@fx       {"from": "inputR", "to": "pong"},
+;@fx       {"from": "pong", "to": "ping"},
+;@fx       {"from": "ping", "to": "pong"},
+;@fx       {"from": "ping", "to": "outputL"},
+;@fx       {"from": "pong", "to": "outputR"}
+;@fx     ]
+;@fx   }
+;@fx }
+
+; =====================================================================
+; Ping-Pong Delay
+; Based on Frank Thomson's ping-pong delay (OCT Distribution)
+; Source: mstratman/fv1-programs collection
+;
+; A stereo bouncing delay — the echo alternates between left and right
+; channels like a ball bouncing back and forth. Each side has its own
+; delay time knob so you can create asymmetric rhythmic patterns.
+;
+; POT0 (Knob 1) = Ping Time — delay time for left channel echoes
+; POT1 (Knob 2) = Pong Time — delay time for right channel echoes
+; POT2 (Knob 3) = Feedback — how many times the echo repeats
+; =====================================================================
+
+; ===== DELAY MEMORY =====
+; Two delay buffers, one per channel — together they use nearly all
+; available RAM (32,766 of 32,768 samples)
+
+EQU ping_len  16383          ; max ping delay length (~0.5 seconds)
+EQU pong_len  16383          ; max pong delay length (~0.5 seconds)
+
+MEM ping  ping_len            ; left channel delay buffer
+MEM pong  pong_len            ; right channel delay buffer
+
+; ===== CONSTANTS =====
+
+EQU smooth      0.001        ; TWEAK: pot smoothing speed (lower = smoother but slower response)
+EQU feedforward 0.8          ; TWEAK: dry signal level (0.5=quiet, 0.8=normal, 1.0=loud — risk of clipping)
+EQU del_out     0.8          ; TWEAK: delay output level (same range as feedforward)
+
+; ===== REGISTERS =====
+
+EQU ping_addr   REG0         ; smoothed ping delay time (from POT0)
+EQU pong_addr   REG1         ; smoothed pong delay time (from POT1)
+EQU feedback    REG2         ; smoothed feedback amount (from POT2)
+EQU ping_data   REG3         ; audio read from ping delay
+EQU pong_data   REG4         ; audio read from pong delay
+
+; ===== INITIALIZATION (runs once at power-on) =====
+
+skp RUN, loop
+clr                           ; clear accumulator
+wrax ping_addr, 0             ; zero out all registers to prevent startup noise
+wrax pong_addr, 0
+wrax feedback, 0
+
+loop:
+
+; ===== READ KNOBS (with smoothing to prevent zipper noise) =====
+; Each pot is filtered through a one-pole lowpass so that turning
+; the knob doesn't cause clicks or zipper artifacts in the audio.
+
+; --- POT0: Ping delay time ---
+clr                           ; start fresh
+or   ping_len*256             ; load max delay length (scaled to match address format)
+mulx POT0                     ; scale by knob position (0=no delay, full=max delay)
+rdfx ping_addr, smooth        ; smooth it: slowly approach target value
+wrax ping_addr, 0             ; store smoothed value
+or   ping*256                 ; load the base address of the ping delay buffer
+rdax ping_addr, 1.0           ; add the smoothed offset to get the read position
+wrax ADDR_PTR, 0              ; set the hardware address pointer
+rmpa 1                        ; read audio from that delay position
+wrax ping_data, 0             ; store the delayed audio for later use
+
+; --- POT1: Pong delay time ---
+or   pong_len*256             ; same process for the right channel delay
+mulx POT1                     ; scale by knob position
+rdfx pong_addr, smooth        ; smooth it
+wrax pong_addr, 0             ; store
+or   pong*256                 ; load pong base address
+rdax pong_addr, 1.0           ; add offset
+wrax ADDR_PTR, 0              ; set address pointer
+rmpa 1                        ; read delayed audio
+wrax pong_data, 0             ; store for later
+
+; --- POT2: Feedback amount ---
+rdax POT2, 1.0                ; read feedback knob
+rdfx feedback, smooth         ; smooth it to prevent clicks
+wrax feedback, 0              ; store smoothed feedback value
+
+; ===== OUTPUT MIXING =====
+; Mix the dry input with the delayed signal for each channel
+
+; --- Left output: dry input + ping delay ---
+rdax ADCL, feedforward        ; dry left input at 0.8 volume
+rdax ping_data, del_out       ; add ping delay at 0.8 volume
+wrax DACL, 0                  ; send to left output
+
+; --- Right output: dry input + pong delay ---
+rdax ADCR, feedforward        ; dry right input at 0.8 volume
+rdax pong_data, del_out       ; add pong delay at 0.8 volume
+wrax DACR, 0                  ; send to right output
+
+; ===== DELAY FEEDBACK (the ping-pong crossfeed) =====
+; This is what creates the bouncing effect: the output of the LEFT
+; delay feeds into the RIGHT delay, and vice versa. The feedback
+; knob controls how much signal crosses over each bounce.
+
+; --- Write to ping delay: pong output + left input ---
+rdax pong_data, 1.0           ; take the pong (right) delay output
+mulx feedback                 ; scale by feedback amount (controls number of repeats)
+rdax ADCL, feedforward        ; add fresh left input
+wra  ping, 0                  ; write to the head of the ping delay line
+
+; --- Write to pong delay: ping output + right input ---
+rdax ping_data, 1.0           ; take the ping (left) delay output
+mulx feedback                 ; scale by feedback amount
+rdax ADCR, feedforward        ; add fresh right input
+wra  pong, 0                  ; write to the head of the pong delay line
