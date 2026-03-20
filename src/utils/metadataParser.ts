@@ -26,7 +26,7 @@ export interface FxMetadata {
 
 /**
  * Extract metadata from SpinASM source code
- * Looks for ;@fx headers and parses JSON content
+ * Looks for ;@fx lines anywhere in the file (top or bottom) and parses JSON content
  * Returns null if no metadata found or parsing fails (graceful degradation)
  */
 export function extractMetadata(source: string): FxMetadata | null {
@@ -36,56 +36,18 @@ export function extractMetadata(source: string): FxMetadata | null {
 
   try {
     const lines = source.split('\n')
-    let inMetadata = false
-    let jsonLines: string[] = []
-    let braceCount = 0
+    const jsonLines: string[] = []
 
+    // Collect all ;@fx lines from anywhere in the file
     for (const line of lines) {
       const trimmed = line.trim()
 
-      // Check for ;@fx marker (start of metadata block)
       if (trimmed.startsWith(';@fx')) {
-        inMetadata = true
-        // Extract content after ;@fx marker
         const content = trimmed.substring(4).trim()
-        
+
         // Skip version-only lines like ";@fx v1" or ";@fx v2"
         if (content && !content.match(/^v[0-9]+$/)) {
           jsonLines.push(content)
-          // Count braces to detect complete JSON
-          for (const char of content) {
-            if (char === '{') braceCount++
-            if (char === '}') braceCount--
-          }
-        }
-        continue
-      }
-
-      // Continue collecting lines if we're in metadata block
-      if (inMetadata) {
-        // Stop if we hit a non-comment line
-        if (!trimmed.startsWith(';')) {
-          break
-        }
-
-        // Remove leading semicolon and @fx prefix if present
-        let content = trimmed.substring(1).trim()
-        if (content.startsWith('@fx')) {
-          content = content.substring(3).trim()
-        }
-
-        if (content) {
-          jsonLines.push(content)
-          // Count braces
-          for (const char of content) {
-            if (char === '{') braceCount++
-            if (char === '}') braceCount--
-          }
-        }
-
-        // Check if we have complete JSON (all braces closed)
-        if (braceCount === 0 && jsonLines.length > 0) {
-          break
         }
       }
     }

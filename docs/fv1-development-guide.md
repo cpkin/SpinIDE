@@ -33,7 +33,7 @@ For example, if the user asks for a plate reverb, fetch `dattorro.spn`. If they 
 - Present code in a **single fenced code block** (` ```asm `) so the user can copy-paste the entire program in one action. Never split the program across multiple code blocks
 - Always follow the **program structure order** from Section 2 (header, MEM, EQU, init, pots, input, processing, output)
 - Use the **skeleton template in Section 14** as your starting point for every program
-- Do **NOT** include `;@fx` metadata blocks — SpinIDE does not currently support them
+- Always include a **`;@fx` signal path metadata block at the end of the file** (after all code). This powers SpinIDE's signal path diagram. See Section 13 for the format
 
 ### 1.3 Pot Behavior Visualization (Required)
 
@@ -949,7 +949,57 @@ When iterating with an AI tool, use the "Copy errors" feature in SpinIDE to past
 
 ---
 
-## 13. Quick Reference Card
+## 13. Signal Path Metadata (`;@fx` Block)
+
+Always include a signal path metadata block **at the end of the file**, after all code. This powers SpinIDE's signal path diagram visualization. The block is embedded as comments so the assembler ignores it.
+
+**Format:**
+
+```asm
+; (your program code above)
+
+;@fx v1
+;@fx {
+;@fx   "version": "v1",
+;@fx   "effectName": "My Effect",
+;@fx   "io": "mono_stereo",
+;@fx   "pots": [
+;@fx     {"id": "pot0", "label": "Time"},
+;@fx     {"id": "pot1", "label": "Feedback"},
+;@fx     {"id": "pot2", "label": "Mix"}
+;@fx   ],
+;@fx   "memory": [
+;@fx     {"name": "delay1", "samples": 24576}
+;@fx   ],
+;@fx   "graph": {
+;@fx     "nodes": ["input", "delay", "output"],
+;@fx     "edges": [
+;@fx       {"from": "input", "to": "delay"},
+;@fx       {"from": "delay", "to": "output"}
+;@fx     ]
+;@fx   }
+;@fx }
+```
+
+**Fields:**
+
+| Field | Required | Description |
+|---|---|---|
+| `effectName` | Yes | Human-readable effect name |
+| `io` | Yes | `"mono_mono"`, `"mono_stereo"`, or `"stereo_stereo"` |
+| `pots` | Yes | Exactly 3 entries with `id` and `label` |
+| `memory` | Yes | One entry per `MEM` directive with `name` and `samples` |
+| `graph` | Yes | `nodes` (string array) and `edges` (from/to pairs) for the signal path diagram |
+
+**Rules:**
+- Place this block at the **very end** of the `.spn` file, after all instructions
+- `pots` must have exactly 3 entries (pot0, pot1, pot2) — use `"(unused)"` as label for unused pots
+- `memory` `samples` values must match the `MEM` sizes in the code
+- All node IDs in `edges` must exist in `nodes`
+
+---
+
+## 14. Quick Reference Card
 
 Always use this skeleton as the starting point for new programs:
 
@@ -999,11 +1049,18 @@ mulx mix              ; ACC = mix * (wet - dry)
 rdax mono, 1.0        ; ACC = dry + mix*(wet-dry)
 wrax DACL, 1.0        ; left output (keep in ACC)
 wrax DACR, 0.0        ; right output (clear ACC)
+
+; ===== SIGNAL PATH METADATA (for SpinIDE visualization) =====
+;@fx v1
+;@fx { "version": "v1", "effectName": "My Effect", "io": "mono_stereo",
+;@fx   "pots": [{"id":"pot0","label":"Param1"},{"id":"pot1","label":"Param2"},{"id":"pot2","label":"Mix"}],
+;@fx   "memory": [{"name":"buf","samples":8192}],
+;@fx   "graph": {"nodes":["in","proc","out"],"edges":[{"from":"in","to":"proc"},{"from":"proc","to":"out"}]} }
 ```
 
 ---
 
-## 14. Effect Recipe Index
+## 15. Effect Recipe Index
 
 Quick reference for common effects and the patterns they combine:
 
