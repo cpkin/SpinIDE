@@ -30,18 +30,18 @@ export default function FidelityModal() {
 
         <div className="modal-body">
           <p className="fidelity-intro">
-            Our human &amp; common ability to think is what connects us. Removing the technical aspect of DSP programming is not a great evil that kills thought. It is merely a means of removing technical barriers for creatives to explore new sounds.
+            Our shared human ability to think is a thread of commonality among us. Removing the technical aspect of DSP programming is not a great evil that kills thought, but merely a means of removing barriers to explore new sounds.
           </p>
 
           <p className="fidelity-intro">
-            I encourage anybody using this tool to have fun by making new sounds as opposed to new subscriptions.
+            I encourage anybody using this tool to have fun by making new sounds with AI as opposed to new subscriptions.
           </p>
 
           <blockquote className="manifesto-quote">
             <p>
-              "I BELIEVE THAT THE USE OF NOISE TO MAKE MUSIC WILL CONTINUE AND INCREASE UNTIL WE REACH A MUSIC PRODUCED THROUGH THE AID OF ELECTRICAL INSTRUMENTS WHICH WILL MAKE AVAILABLE FOR MUSICAL PURPOSES ANY AND ALL SOUNDS THAT CAN BE HEARD. PHOTOELECTRIC, FILM, AND MECHANICAL MEDIUMS FOR THE SYNTHETIC PRODUCTION OF MUSIC WILL BE EXPLORED. WHEREAS, IN THE PAST, THE POINT OF DISAGREEMENT HAS BEEN BETWEEN DISSONANCE AND CONSONANCE, IT WILL BE, IN THE IMMEDIATE FUTURE, BETWEEN NOISE AND SO-CALLED MUSICAL SOUNDS."
+              "I BELIEVE THAT THE USE OF NOISE TO MAKE MUSIC WILL CONTINUE AND INCREASE UNTIL WE REACH A MUSIC PRODUCED THROUGH THE AID OF ELECTRICAL INSTRUMENTS WHICH WILL MAKE AVAILABLE FOR MUSICAL PURPOSES ANY AND ALL SOUNDS THAT CAN BE HEARD."
             </p>
-            <footer>— John Cage, on the future of music</footer>
+            <footer>— John Cage, <a href="https://www.nbaldrich.com/media/pdfs/future_of_music.pdf" target="_blank" rel="noopener noreferrer"><em>The Future of Music: Credo</em></a></footer>
           </blockquote>
 
           <div className="manifesto-acknowledgements">
@@ -71,7 +71,7 @@ export default function FidelityModal() {
             onClick={handleAcknowledge}
             type="button"
           >
-            Let's Make Some Noise
+            Make Noise
           </button>
         </div>
       </div>
