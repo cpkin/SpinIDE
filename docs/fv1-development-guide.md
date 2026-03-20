@@ -22,9 +22,9 @@ When generating SpinASM code, you MUST follow these rules:
 
 - Always produce a **single, complete, runnable `.spn` program** — never code fragments or partial files
 - Present code in a **single fenced code block** (` ```asm `) so the user can copy-paste the entire program in one action. Never split the program across multiple code blocks
-- Always include the **`;@fx` metadata block** at the top (see Section 13) so the program works with SpinIDE's signal path diagram, pot labels, and UI features
-- Always follow the **program structure order** from Section 2 (metadata, header, MEM, EQU, init, pots, input, processing, output)
-- Use the **skeleton template in Section 15** as your starting point for every program
+- Always follow the **program structure order** from Section 2 (header, MEM, EQU, init, pots, input, processing, output)
+- Use the **skeleton template in Section 14** as your starting point for every program
+- Do **NOT** include `;@fx` metadata blocks — SpinIDE does not currently support them
 
 ### 1.2 Pot Behavior Visualization (Required)
 
@@ -108,7 +108,6 @@ Before presenting your program to the user, mentally verify:
 - Every program has a `skp RUN, label` initialization guard
 - Every program writes to at least `DACL` (and `DACR` for stereo output)
 - Feedback coefficients are **< 1.0** (to prevent runaway oscillation)
-- The `;@fx` metadata `memory` entries match the actual `MEM` declarations
 
 If the user's request would exceed 128 instructions, simplify the design and explain what tradeoffs you made. Do not silently exceed the limit.
 
@@ -941,71 +940,12 @@ When iterating with an AI tool, use the "Copy errors" feature in SpinIDE to past
 
 ---
 
-## 13. SpinIDE Metadata Schema (`;@fx` Headers)
-
-SpinIDE supports optional structured metadata in `.spn` files for signal path diagram generation, pot labeling, and enhanced UI features. Metadata is **not required** for the assembler or simulator — it is SpinIDE-specific.
-
-### 13.1 Format
-
-Metadata is embedded as structured comments at the top of the file:
-
-```asm
-;@fx v1
-;@fx {
-;@fx   "version": "v1",
-;@fx   "effectName": "My Effect",
-;@fx   "io": "mono_stereo",
-;@fx   "pots": [
-;@fx     {"id": "pot0", "label": "Time"},
-;@fx     {"id": "pot1", "label": "Feedback"},
-;@fx     {"id": "pot2", "label": "Mix"}
-;@fx   ],
-;@fx   "memory": [
-;@fx     {"name": "delay1", "samples": 24576}
-;@fx   ],
-;@fx   "graph": {
-;@fx     "nodes": ["input", "delay", "output"],
-;@fx     "edges": [
-;@fx       {"from": "input", "to": "delay"},
-;@fx       {"from": "delay", "to": "output"}
-;@fx     ]
-;@fx   }
-;@fx }
-```
-
-### 13.2 Field Reference
-
-| Field | Required | Type | Description |
-|---|---|---|---|
-| `version` | No | `"v1"` \| `"v2"` | Schema version; defaults to v1 with warning if omitted |
-| `effectName` | Yes | String (1–64 chars) | Human-readable effect name |
-| `io` | Yes | `"mono_mono"` \| `"mono_stereo"` \| `"stereo_stereo"` | I/O mode |
-| `pots` | Yes | Array[3] | Exactly 3 pot objects with `id` and `label` |
-| `memory` | Yes | Array | One entry per `MEM` directive with `name` and `samples` |
-| `graph` | Yes | Object | `nodes` (string array) and `edges` (from/to pairs) |
-
-### 13.3 Common Mistakes
-
-- `pots` array must have **exactly 3 entries** (pot0, pot1, pot2)
-- `memory` `samples` values must match the `MEM` sizes in the code
-- Total `memory.samples` across all entries must not exceed 32,768
-- All node IDs referenced in `edges` must exist in `nodes`
-- Feedback cycles in `edges` are supported and visually highlighted by SpinIDE
-
----
-
-## 14. Quick Reference Card
+## 13. Quick Reference Card
 
 Always use this skeleton as the starting point for new programs:
 
 ```asm
 ; --- Boilerplate skeleton for a mono-in stereo-out effect ---
-
-;@fx v1
-;@fx { "version": "v1", "effectName": "My Effect", "io": "mono_stereo",
-;@fx   "pots": [{"id":"pot0","label":"Param1"},{"id":"pot1","label":"Param2"},{"id":"pot2","label":"Mix"}],
-;@fx   "memory": [{"name":"buf","samples":8192}],
-;@fx   "graph": {"nodes":["in","proc","out"],"edges":[{"from":"in","to":"proc"},{"from":"proc","to":"out"}]} }
 
 ; My Effect
 ; POT0 (Knob 1) = Param1 — describe what this knob does
@@ -1054,7 +994,7 @@ wrax DACR, 0.0        ; right output (clear ACC)
 
 ---
 
-## 15. Effect Recipe Index
+## 14. Effect Recipe Index
 
 Quick reference for common effects and the patterns they combine:
 

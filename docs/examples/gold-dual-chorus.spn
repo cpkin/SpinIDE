@@ -1,29 +1,3 @@
-;@fx v1
-;@fx {
-;@fx   "version": "v1",
-;@fx   "effectName": "Dual-Rate Chorus",
-;@fx   "io": "mono_stereo",
-;@fx   "pots": [
-;@fx     {"id": "pot0", "label": "Chorus Level"},
-;@fx     {"id": "pot1", "label": "Rate A"},
-;@fx     {"id": "pot2", "label": "Rate B"}
-;@fx   ],
-;@fx   "memory": [
-;@fx     {"name": "chodel", "samples": 4096}
-;@fx   ],
-;@fx   "graph": {
-;@fx     "nodes": ["input", "chorusA", "chorusB", "mix", "outputL"],
-;@fx     "edges": [
-;@fx       {"from": "input", "to": "chorusA"},
-;@fx       {"from": "input", "to": "chorusB"},
-;@fx       {"from": "chorusA", "to": "mix"},
-;@fx       {"from": "chorusB", "to": "mix"},
-;@fx       {"from": "input", "to": "mix"},
-;@fx       {"from": "mix", "to": "outputL"}
-;@fx     ]
-;@fx   }
-;@fx }
-
 ; =====================================================================
 ; Dual-Rate Chorus
 ; Based on dual-rate chorus from the SpinSemi forum
