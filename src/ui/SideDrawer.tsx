@@ -9,6 +9,7 @@ const GUIDE_URL = 'https://raw.githubusercontent.com/cpkin/fv1tool/main/docs/fv1
 
 export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
   const [copied, setCopied] = useState(false)
+  const [avatarError, setAvatarError] = useState(false)
 
   const handleCopyManifest = async () => {
     try {
@@ -70,33 +71,60 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
                 <span className="roadmap-status roadmap-planned">Planned</span>
                 <span>Shareable URLs — link directly to a program to share effects with others</span>
               </li>
+              <li className="roadmap-item">
+                <span className="roadmap-status roadmap-planned">Planned</span>
+                <span>UI improvements</span>
+              </li>
             </ul>
           </section>
 
           {/* About / Contact */}
           <section className="drawer-section">
             <h3 className="drawer-section-title">About / Contact</h3>
-            <p className="drawer-text">
-              Built by <a href="https://github.com/cpkin" target="_blank" rel="noopener noreferrer">@cpkin</a>
-            </p>
-          </section>
-
-          {/* License */}
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">License</h3>
-            <p className="drawer-text">MIT License © 2026</p>
+            <div className="drawer-about-row">
+              {avatarError ? (
+                <div className="drawer-avatar-fallback">CP</div>
+              ) : (
+                <img
+                  className="drawer-avatar"
+                  src="https://avatars.githubusercontent.com/cpkin"
+                  alt="cpkin"
+                  width={32}
+                  height={32}
+                  onError={() => setAvatarError(true)}
+                />
+              )}
+              <div className="drawer-about-text">
+                <span className="drawer-about-name">cpkin</span>
+                <span className="drawer-about-url">github.com/cpkin</span>
+              </div>
+              <a
+                className="drawer-about-pill"
+                href="https://github.com/cpkin/fv1tool"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                fv1tool ↗
+              </a>
+            </div>
           </section>
 
           {/* Acknowledgements */}
           <section className="drawer-section">
             <h3 className="drawer-section-title">Acknowledgements</h3>
             <ul className="drawer-links">
-              <li><a href="http://www.spinsemi.com" target="_blank" rel="noopener noreferrer">Spin Semiconductor</a> — creators of the FV-1 chip</li>
+              <li><a href="https://holy-city-audio.gitbook.io/spincad-designer" target="_blank" rel="noopener noreferrer">Holy City Audio</a> — SpinCAD Designer</li>
               <li><a href="https://github.com/audiofab/fv1-vscode" target="_blank" rel="noopener noreferrer">Audiofab</a> — FV-1 VS Code extension</li>
               <li><a href="https://github.com/mstratman/fv1-programs" target="_blank" rel="noopener noreferrer">mstratman / MAS Effects</a> — community FV-1 program collection</li>
-              <li><a href="https://holy-city-audio.gitbook.io/spincad-designer" target="_blank" rel="noopener noreferrer">Holy City Audio</a> — SpinCAD Designer</li>
               <li><a href="https://github.com/ndf-zz/asfv1" target="_blank" rel="noopener noreferrer">asfv1</a> — cross-platform Python assembler</li>
+              <li><a href="http://www.spinsemi.com" target="_blank" rel="noopener noreferrer">Spin Semiconductor</a> — creators of the FV-1 chip</li>
             </ul>
+          </section>
+
+          {/* License */}
+          <section className="drawer-section">
+            <h3 className="drawer-section-title">License</h3>
+            <p className="drawer-text">MIT License © 2026</p>
           </section>
         </div>
       </aside>

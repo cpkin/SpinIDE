@@ -1133,6 +1133,40 @@ body {
 }
 .drawer-links a:hover { text-decoration: underline; }
 
+.drawer-about-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.drawer-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--border); flex-shrink: 0;
+}
+.drawer-avatar-fallback {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--border); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 600; color: var(--ink-muted);
+  background: var(--bg-surface);
+}
+.drawer-about-text {
+  display: flex; flex-direction: column; min-width: 0;
+}
+.drawer-about-name {
+  font-size: 12px; color: var(--ink); font-weight: 500; line-height: 1.3;
+}
+.drawer-about-url {
+  font-size: 11px; color: var(--ink-muted); line-height: 1.3;
+}
+.drawer-about-pill {
+  margin-left: auto; flex-shrink: 0;
+  font-size: 11px; color: var(--accent);
+  border: 1px solid var(--accent); background: transparent;
+  padding: 3px 8px; border-radius: 4px;
+  text-decoration: none; white-space: nowrap;
+}
+.drawer-about-pill:hover {
+  background: var(--accent); color: var(--panel);
+}
+
 /* ================================================
    RESPONSIVE
    ================================================ */
