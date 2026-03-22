@@ -7,6 +7,12 @@ export interface ResampleResult {
   note: string;
 }
 
+const AudioCtx = globalThis.AudioContext || (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+/**
+ * Resample an AudioBuffer to the target sample rate using linear interpolation.
+ * Avoids OfflineAudioContext which doesn't support non-standard rates (e.g. 32kHz) on iOS.
+ */
 export async function resampleAudio(
   buffer: AudioBuffer,
   targetSampleRate: number = FV1_SAMPLE_RATE,
@@ -20,17 +26,28 @@ export async function resampleAudio(
     };
   }
 
-  const frameCount = Math.ceil(buffer.duration * targetSampleRate);
-  const offlineContext = new OfflineAudioContext(
-    buffer.numberOfChannels,
-    frameCount,
-    targetSampleRate,
-  );
-  const source = new AudioBufferSourceNode(offlineContext, { buffer });
-  source.connect(offlineContext.destination);
-  source.start(0);
+  const ratio = buffer.sampleRate / targetSampleRate;
+  const frameCount = Math.ceil(buffer.length / ratio);
+  const channels = buffer.numberOfChannels;
 
-  const resampled = await offlineContext.startRendering();
+  // Create output buffer via AudioContext.createBuffer (works on all platforms)
+  const ctx = new AudioCtx();
+  const resampled = ctx.createBuffer(channels, frameCount, targetSampleRate);
+  await ctx.close();
+
+  // Linear interpolation resampling for each channel
+  for (let ch = 0; ch < channels; ch++) {
+    const input = buffer.getChannelData(ch);
+    const output = resampled.getChannelData(ch);
+    for (let i = 0; i < frameCount; i++) {
+      const srcIndex = i * ratio;
+      const srcFloor = Math.floor(srcIndex);
+      const frac = srcIndex - srcFloor;
+      const s0 = input[srcFloor] ?? 0;
+      const s1 = input[srcFloor + 1] ?? s0;
+      output[i] = s0 + frac * (s1 - s0);
+    }
+  }
 
   return {
     buffer: resampled,

@@ -250,17 +250,15 @@ export async function renderSimulation(
 
   const outputStats = computePeakRms(outputL);
 
-  // Create output buffer directly without OfflineAudioContext processing
-  const outputContext = new OfflineAudioContext(
-    outputChannels,
-    frameCount,
-    FV1_SAMPLE_RATE,
-  );
-  const rendered = outputContext.createBuffer(outputChannels, frameCount, FV1_SAMPLE_RATE);
+  // Create output AudioBuffer directly (no OfflineAudioContext — iOS doesn't support 32kHz)
+  const AudioCtx = globalThis.AudioContext || (globalThis as typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const tmpCtx = new AudioCtx();
+  const rendered = tmpCtx.createBuffer(outputChannels, frameCount, FV1_SAMPLE_RATE);
   rendered.copyToChannel(outputL, 0);
   if (outputChannels > 1) {
     rendered.copyToChannel(outputR, 1);
   }
+  await tmpCtx.close();
 
   if (request.onDebug) {
     const label = request.debugLabel ?? 'render';
