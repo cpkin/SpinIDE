@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import SpinEditor from './editor/SpinEditor'
 import { useValidationStore } from './store/validationStore'
 import { useAudioStore } from './store/audioStore'
@@ -144,6 +145,7 @@ function App() {
 
   return (
     <>
+      <Analytics />
       <FidelityModal />
       <div className={`app ${darkMode ? 'dark' : 'light'}`}>
         {/* Compact header */}
