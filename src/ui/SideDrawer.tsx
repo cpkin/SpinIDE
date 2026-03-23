@@ -125,7 +125,7 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
 
           {/* Licenses */}
           <section className="drawer-section">
-            <h3 className="drawer-section-title">Licenses</h3>
+            <h3 className="drawer-section-title">Acknowledgements &amp; Licenses</h3>
             <div className="drawer-licenses">
               <p className="license-entry">
                 <a href="https://github.com/cpkin/fv1tool" target="_blank" rel="noopener noreferrer">FV1Tool</a> by cpkin<br />
@@ -142,6 +142,9 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
               <p className="license-entry">
                 Uses <a href="https://js.cytoscape.org" target="_blank" rel="noopener noreferrer">Cytoscape.js</a> by The Cytoscape Consortium<br />
                 Copyright © The Cytoscape Consortium — MIT License
+              </p>
+              <p className="license-entry">
+                Uses examples from <a href="https://github.com/mstratman/fv1-programs" target="_blank" rel="noopener noreferrer">mstratman / MAS Effects</a>
               </p>
               <p className="license-disclaimer">
                 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
