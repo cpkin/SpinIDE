@@ -1172,6 +1172,23 @@ body {
   background: var(--accent); color: var(--panel);
 }
 
+.drawer-licenses { font-size: 0.78rem; line-height: 1.5; }
+.license-entry {
+  margin: 0 0 10px; color: var(--ink-muted);
+}
+.license-entry a { color: var(--accent); text-decoration: none; }
+.license-entry a:hover { text-decoration: underline; }
+.license-disclaimer {
+  margin: 12px 0 10px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.68rem; line-height: 1.5;
+  color: var(--ink-muted); text-transform: uppercase;
+}
+.license-privacy {
+  margin: 0; font-size: 0.75rem; line-height: 1.5;
+  color: var(--ink-muted); font-style: italic;
+}
+
 /* ================================================
    RESPONSIVE
    ================================================ */

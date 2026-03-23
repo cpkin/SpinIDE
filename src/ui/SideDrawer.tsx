@@ -123,10 +123,33 @@ export default function SideDrawer({ isOpen, onClose }: SideDrawerProps) {
             </ul>
           </section>
 
-          {/* License */}
+          {/* Licenses */}
           <section className="drawer-section">
-            <h3 className="drawer-section-title">License</h3>
-            <p className="drawer-text">MIT License © 2026</p>
+            <h3 className="drawer-section-title">Licenses</h3>
+            <div className="drawer-licenses">
+              <p className="license-entry">
+                <a href="https://github.com/cpkin/fv1tool" target="_blank" rel="noopener noreferrer">FV1Tool</a> by cpkin<br />
+                Copyright © 2026 FV1Tool contributors
+              </p>
+              <p className="license-entry">
+                Uses portions of <a href="https://github.com/audiofab/fv1-vscode" target="_blank" rel="noopener noreferrer">fv1-vscode</a> by Audiofab<br />
+                Copyright © Audiofab — MIT License
+              </p>
+              <p className="license-entry">
+                Uses <a href="https://codemirror.net" target="_blank" rel="noopener noreferrer">CodeMirror</a> by Marijn Haverbeke<br />
+                Copyright © 2018–present Marijn Haverbeke — MIT License
+              </p>
+              <p className="license-entry">
+                Uses <a href="https://js.cytoscape.org" target="_blank" rel="noopener noreferrer">Cytoscape.js</a> by The Cytoscape Consortium<br />
+                Copyright © The Cytoscape Consortium — MIT License
+              </p>
+              <p className="license-disclaimer">
+                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+              </p>
+              <p className="license-privacy">
+                This web application stores user settings on this computer in local storage. We don't collect information or any personal data from our users.
+              </p>
+            </div>
           </section>
         </div>
       </aside>
