@@ -795,6 +795,69 @@ wrax DACR, 0.0         ; right output
 - **Output taps** from different points in the ring create natural stereo image
 - Left and right outputs use **different tap positions** for decorrelation
 
+#### Reverb Design Decisions
+
+The character of a reverb is determined by a few key architectural choices. Understanding these lets you create different reverb flavors from the same basic ring topology.
+
+**1. Delay table sizing = reverb character.** The Spin Semi plate reverbs (rev_pl_1/2/3) are the *same algorithm* with different MEM sizes. This is the simplest way to create reverb variants:
+
+| Character | Total delay RAM | Largest single delay | Result |
+|---|---|---|---|
+| Lush plate | ~995 ms (nearly full RAM) | ~140 ms | Long, spacious wash |
+| Tight plate | ~634 ms | ~82 ms | Controlled, focused tail |
+| Very tight plate | ~384 ms | ~42 ms | Short, percussive ambience |
+
+When designing a reverb, choose total delay RAM first — it sets the overall size of the space. With shorter delays, raise the minimum krt floor (e.g., 0.40 instead of 0.30) to prevent the tail from dying too quickly.
+
+**2. Paired allpasses for extra density.** Instead of one allpass per loop stage, use two back-to-back APs with slightly different coefficients (e.g., 0.6 and 0.5). This doubles diffusion density without needing longer delay lines — useful for room reverbs that need to sound thick but not washy:
+
+```asm
+; Paired allpasses in one loop stage (denser diffusion)
+rda  ap1a#, 0.6
+wrap ap1a,  -0.6
+rda  ap1b#, 0.5         ; second AP with slightly lower coefficient
+wrap ap1b,  -0.5
+```
+
+**3. Early reflections for room character.** Plate reverbs skip early reflections entirely — they go straight to the diffuse tail. Room reverbs benefit from dedicated early reflection delays tapped at multiple offsets. This creates a sense of room geometry (walls, ceiling) before the tail builds:
+
+```asm
+; Dedicated early reflection buffers (written mid-loop, tapped for output)
+MEM ldel 3000            ; left early reflections (~91 ms)
+MEM rdel 3000            ; right early reflections (~91 ms)
+
+; Output: mix early reflections + loop taps
+rda  ldel+500, 0.5       ; early tap 1
+rda  ldel+1200, 0.4      ; early tap 2
+rda  del1+2630, 0.6      ; loop tap (late reverb)
+wrax DACL, 0.0
+```
+
+**4. Variable diffusion via pot.** Expose the allpass coefficient as a knob-controlled parameter using `MULX` instead of a fixed constant. At zero, the allpasses are nearly bypassed (sparse, echo-y). At maximum, dense diffusion:
+
+```asm
+; POT1 controls diffusion amount (0 = sparse, 0.7 = dense)
+rdax POT1, 0.7
+wrax kdiff, 0
+
+; In the allpass: use MULX instead of fixed coefficient
+rda  ap1#, 1.0
+mulx kdiff               ; variable coefficient from pot
+wrap ap1, 0.0
+; Note: this is an approximation — true allpass needs matched coefficients
+```
+
+**5. Reverb time pot shaping.** Use sqrt shaping (via log/exp) on the reverb time pot for a more musical taper — subtle control at short settings, faster ramp toward long decay:
+
+```asm
+; Sqrt pot curve for reverb time (more natural feel than linear)
+rdax POT0, 1.0
+log  0.5, 0.0            ; take log, halve it (= sqrt in log domain)
+exp  1.0, 0.0            ; back to linear
+sof  0.6, 0.3            ; scale to krt range 0.3–0.9
+wrax krt, 0
+```
+
 ### 11.7 Feedback Delay
 
 ```asm
